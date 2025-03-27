@@ -6,7 +6,7 @@ import java.awt.Color;
 // represents a pixel in a grid
 interface IPixel {
   // inserts a new node with the given value after this node
-  public void insertToRight(Color color);
+  public void insertRight(Color color);
 
   // inserts a new node with the given value after this node
   public void insertBelow(Color color);
@@ -179,6 +179,12 @@ class Pixel extends APixel {
     this.down.up = this.right;
     // change diagonal links?
   }
+
+ 
+  public void insertToRight(Color color) {
+    // TODO Auto-generated method stub
+    
+  }
 }
 
 // represents a pixel at the edge of the image (black pixel)
@@ -320,15 +326,41 @@ class SeamInfo {
   SeamInfo(Pixel pixel, double totalWeight, SeamInfo cameFrom) {
     this.pixel = pixel;
     this.totalWeight = pixel.totalEnergy();
-    this.cameFrom = ;
+    this.cameFrom = null;
   }
   // computes the minimum
   SeamInfo minimumSeam() {
-    // 
+    //...is this allowed
+    SeamInfo s1 = this.cameFrom;
+    SeamInfo s2 = s1.cameFrom;
+    SeamInfo s3 = s2.cameFrom;
+    
+    Double min = this.totalWeight;
+    SeamInfo minSeam = this;
+    
+    if (s1.totalWeight < min) {
+      min = s1.totalWeight;
+      minSeam = s1;
+    }
+  
+    else if (s2.totalWeight < min) {
+      min = s2.totalWeight;
+      minSeam = s2;
+    }
+    
+    else if (s3.totalWeight < min) {
+      min = s3.totalWeight;
+      minSeam = s3;
+    }
+    
+    Double newWeight = minSeam.totalWeight + minSeam.pixel.totalEnergy();
+    
+    return new SeamInfo(minSeam.pixel, newWeight, minSeam.cameFrom);
+    
   }
 
-  // removes this seam?
+  // removes this seam
   SeamInfo removeSeam() {
-    //
+    return this.cameFrom;
   }
 }
