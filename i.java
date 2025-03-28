@@ -2,6 +2,7 @@ import java.util.Iterator;
 import tester.*;
 import javalib.impworld.*;
 import java.awt.Color;
+import java.util.ArrayList;
 
 // represents a pixel in a grid
 interface IPixel {
@@ -14,9 +15,13 @@ interface IPixel {
   // removes this node from the list and returns this value
   public void remove();
 
-  // given this node, advance one step, returns the next node in the list,
-  // if there is none, return itself
+  // given this node, advance one step right, returns the next node 
+  // in the list, if there is none, return itself
   IPixel advanceRight();
+
+  // given this node, advance one step down, returns the next node 
+  // in the list, if there is none, return itself 
+  IPixel advanceDown();
 
   // calculates the brightness of this pixel
   double brightness();
@@ -68,6 +73,12 @@ abstract class APixel implements IPixel {
     return this.right;
   }
 
+  // given this node, advance one step down, returns the next node 
+  // in the list, if there is none, return itself 
+  public APixel advanceDown() {
+    return this.down;
+  }
+
   // calculates the brightness of this pixel
   public double brightness() {
     int blue = this.color.getBlue();
@@ -105,7 +116,9 @@ abstract class APixel implements IPixel {
   }
   
   // removes this node from the list and returns this value
-  public abstract void remove();
+  public abstract void remove() {
+    // change links
+  }
 }
 
 // represents a pixel in an image
@@ -180,11 +193,6 @@ class Pixel extends APixel {
     // change diagonal links?
   }
 
- 
-  public void insertToRight(Color color) {
-    // TODO Auto-generated method stub
-    
-  }
 }
 
 // represents a pixel at the edge of the image (black pixel)
@@ -229,11 +237,16 @@ class SentinelCorner extends APixel {
   }
 }
 
-//represents an image as a grid of pixels
+// represents an image as a grid of pixels
 class Grid implements Iterable<APixel> {
   // the start and ends of the grid
   // a list of rows and columns (the corner)
   SentinelCorner corner;
+
+  // the width of this grid
+  public static int WIDTH;
+  // the height of this grid
+  public static int HEIGHT;
 
   // the constructor
   Grid() {
@@ -245,42 +258,137 @@ class Grid implements Iterable<APixel> {
     this.corner = corner;
   }
 
-  // returns an iterator that iterates forward (right)
+  // returns an iterator that iterates right to access columns
   public Iterator<APixel> iterator() {
     // forward as default
-    return new RightIterator(this.corner.right);
+    return new RightIterator(this.corner);
   }
 
-  // returns an iterator that iterates down
+  // returns an iterator that iterates down to access rows
   public Iterator<APixel> verticalIterator() {
     // forward as default
-    return new DownIterator(this.corner.down);
+    return new DownIterator(this.corner);
   }
 
-  // EFFECT: adds the given node to the front of the list
-  void addColumn(Color color) {
+  // returns an iterator that iterates down the specified row in this grid
+  public Iterator<APixel> verticalIterator(int row) {
+    for (int i = 0; i < row; i++) {
+      //
+    }
+    return new DownIterator(this.corner);
+  }
+
+  // EFFECT: adds a pixel of the given color to the end of the specified row
+  void addPixel(int row, Color color) {
     // insert new node after sentinel
-    this.corner.insertAfter(color);
-  }
-
-  // EFFECT: inserts the given node to the tail of the list
-  void addRow(Color color) {
-    // insert new node after sentinel's previous
-    this.corner.insertAfter(color);
+    this.corner.insertRight(color);
   }
 
   // removes the first node from this list and returns that node value
-  APixel removeColumn() {
-    return this.corner.next.remove();
+  // if there's only one seam to remove, remove it and leave an empty image
+  void removeMinimumSeam() {
+    SeamInfo seamToRemove = this.minimumSeam();
+    // remove it through delegation
+    this.corner...();
   }
 
-  // removes the last node from this list and returns that node value
-  APixel removeRow() {
-    return this.corner.prev.remove();
+  // computes the minimum
+  SeamInfo minimumSeam() {
+    // construct array list of the pixels of this grid
+    ArrayList<ArrayList<Pixel>> pixelPaths = new ArrayList<ArrayList<Pixel>>();
+    // two arraylists whose indexes corresponding with one another?
+    ArrayList<ArrayList<Double>> energyPaths = new ArrayList<ArrayList<Double>>();
+
+    // check if arraylists are null first?
+
+    // look at SeamInfo of three upper neighbors
+    double topLeftEnergy = 0;
+    double topEnergy = 0;
+    double topRightEnergy = 0;
+
+    // construct a list of SeamInfos to compare at the end
+    ArrayList<SeamInfo> seams = new ArrayList<SeamInfo>();
+    // for every pixel in the first row, start a seam
+    ArrayList<Pixel> firstRow = pixelPaths.get(0);
+    for (int i = 0; i < firstRow.size(); i++) {
+      SeamInfo seam = new SeamInfo(firstRow.get(i));
+      seams.add(seam);
+    }
+
+    // for every row in the grid, check the upper neighbors of each pixel in that row 
+    // and sum up to the minimum path
+    for (int rowIndex = 1; rowIndex < pixelPaths.size(); rowIndex++) {
+      // get that row to iterate through
+      ArrayList<Pixel> currRow = pixelPaths.get(rowIndex);
+      // get the row of energies that correspond to this row
+      ArrayList<Double> currRowEnergies = energyPaths.get(rowIndex);
+      // the energies of the row above
+      ArrayList<Double> rowEnergiesAbove = energyPaths.get(rowIndex - 1);
+
+      // for every pixel in that row, calculate the minimum path energy and change 
+      // the energy path to the sum with the current path
+      for (int pixIndex = 0; pixIndex < currRow.size(); pixIndex++) {
+        // current pixel
+        Pixel currPixel = currRow.get(pixIndex);
+        topEnergy = rowEnergiesAbove.get(pixIndex);
+        // check if left edge
+        if (pixIndex == 0) {
+          topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
+          topLeftEnergy = 0;
+        }
+        // check if right edge
+        else if (pixIndex == currRow.size() - 1) {
+          topRightEnergy = 0;
+          topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
+        }
+        else {
+          topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
+          topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
+        }
+        // compare energies, change energy in list and make seam
+        double sumEnergy = 0;
+        SeamInfo lastSeam;
+
+        if (topLeftEnergy <= topEnergy && topLeftEnergy <= topRightEnergy) {
+          // top left has least energy
+          sumEnergy = currRowEnergies.get(pixIndex) + topLeftEnergy;
+          lastSeam = seams.get(pixIndex - 1);
+        }
+        else if (topEnergy <= topRightEnergy) {
+          // top has least energy
+          currRowEnergies.set(pixIndex, currRowEnergies.get(pixIndex) + topEnergy);
+          lastSeam = seams.get(pixIndex);
+        }
+        else {
+          // top right has least energy
+          currRowEnergies.set(pixIndex, currRowEnergies.get(pixIndex) + topRightEnergy);
+          lastSeam = seams.get(pixIndex + 1);
+        }
+        currRowEnergies.set(pixIndex, sumEnergy);
+        // add on this pixel to that minimum seam
+        // link this new SeamInfo to the previous one
+        SeamInfo newSeam = new SeamInfo(currPixel, sumEnergy, lastSeam);
+        // change list of seams
+        seams.set(pixIndex, newSeam);
+      }
+    }
+
+    SeamInfo minSeam = seams.get(0);
+    SeamInfo currSeam = minSeam;
+    // compare the weights of the seams at end
+    // parse through seam list and find minimum energy seam
+    for (int i = 0; i < seams.size(); i++) {
+      currSeam = seams.get(i);
+      if(currSeam.hasLessEnergy(minSeam)) {
+        minSeam = currSeam;
+      }
+    }
+    // potentially can be null if no grid
+    return minSeam;
   }
 }
 
-// represents an iterator that goes forward in the list
+// represents an iterator that goes forward in the list of pixels
 class RightIterator implements Iterator {
   // the list to iterate through
   APixel source;
@@ -314,6 +422,40 @@ class RightIterator implements Iterator {
   }
 }
 
+// represents an iterator that goes down in a column of pixels
+class DownIterator implements Iterator {
+  // the list to iterate through
+  APixel source;
+
+  // the constructor
+  DownIterator(APixel source) {
+    this.source = source;
+  }
+
+  // checks whether there exists a next node
+  public boolean hasNext() {
+    // check if next one is a node or goes back to sentinel:
+    return this.source instanceof Pixel;
+  }
+
+  // retrieves this pixel's energy and goes on to the next
+  public Double next() {
+    // checks if there are elements
+    if (!this.hasNext()) { // next one is sentinel
+      throw new RuntimeException("No elements to iterate through.");
+    }
+    Pixel abstractNodeAsNode = (Pixel) source;
+    double energy = abstractNodeAsNode.totalEnergy();
+    this.source = abstractNodeAsNode.advanceDown();
+    return energy;
+  }
+
+  // removes this node from the list
+  public void remove() {
+    this.source.remove();
+  }
+}
+
 //represents a seam
 class SeamInfo {
   // the pixel that this information corresponds to
@@ -323,44 +465,31 @@ class SeamInfo {
   // the seam up to this seam (null if first pixel of the seam)
   SeamInfo cameFrom;
 
+  // initial seam where cameFrom is null
+  SeamInfo(Pixel pixel) {
+    this.pixel = pixel;
+    this.totalWeight = pixel.totalEnergy();
+  }
+
+  // the constructor
   SeamInfo(Pixel pixel, double totalWeight, SeamInfo cameFrom) {
     this.pixel = pixel;
     this.totalWeight = pixel.totalEnergy();
-    this.cameFrom = null;
-  }
-  // computes the minimum
-  SeamInfo minimumSeam() {
-    //...is this allowed
-    SeamInfo s1 = this.cameFrom;
-    SeamInfo s2 = s1.cameFrom;
-    SeamInfo s3 = s2.cameFrom;
-    
-    Double min = this.totalWeight;
-    SeamInfo minSeam = this;
-    
-    if (s1.totalWeight < min) {
-      min = s1.totalWeight;
-      minSeam = s1;
-    }
-  
-    else if (s2.totalWeight < min) {
-      min = s2.totalWeight;
-      minSeam = s2;
-    }
-    
-    else if (s3.totalWeight < min) {
-      min = s3.totalWeight;
-      minSeam = s3;
-    }
-    
-    Double newWeight = minSeam.totalWeight + minSeam.pixel.totalEnergy();
-    
-    return new SeamInfo(minSeam.pixel, newWeight, minSeam.cameFrom);
-    
+    this.cameFrom = cameFrom;
   }
 
   // removes this seam
   SeamInfo removeSeam() {
-    return this.cameFrom;
+    // iterate through grid and relink pixels
+    while (cameFrom != null) {
+      pixel.remove();
+    }
+    return this;
+  }
+
+  // compares energies with the given seam and returns true if this seam
+  // has less energy
+  boolean hasLessEnergy(SeamInfo that) {
+    return totalWeight < that.totalWeight;
   }
 }
