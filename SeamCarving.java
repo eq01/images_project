@@ -81,6 +81,12 @@ interface IPixel {
   // inserts a new node with the given value after this node
   public void insertBelow(Color color);
 
+  // inserts a new edge sentinel to the right of this pixel node
+  public void insertSentinelRight();
+
+  // inserts a new edge sentinel below this pixel node
+  public void insertSentinelBelow();
+
   // removes this node from the list and returns this value
   public void remove();
 
@@ -130,10 +136,26 @@ abstract class APixel implements IPixel {
   // inserts a new pixel below this pixel
   public void insertBelow(Color color) {
     // make new node
-    Pixel newPixel = new Pixel(color, this, this.down, this, this.right);
+    Pixel newPixel = new Pixel(color, this, this.down, this.left, this.right);
     // update this node's links
-    this.right = newPixel;
+    this.down = newPixel;
     // also the diagonals!!!!!!!!
+  }
+
+  // inserts a new edge sentinel to the right of this pixel node
+  public void insertSentinelRight() {
+    SentinelEdge sentinel = new SentinelEdge();
+    this.right = sentinel;
+    sentinel.left = this;
+    sentinel.right = this.right;
+  }
+
+  // inserts a new edge sentinel below this pixel node
+  public void insertSentinelBelow() {
+    SentinelEdge sentinel = new SentinelEdge();
+    this.down = sentinel;
+    sentinel.up = this;
+    sentinel.down = this.down;
   }
 
   // given this node, advance one step right, returns the next node 
@@ -154,7 +176,8 @@ abstract class APixel implements IPixel {
     int red = this.color.getRed();
     int green = this.color.getGreen();
     
-    double average = (blue + red + green) / 255.0;
+    double average = (blue + red + green) / 3;
+    average = average / 255.0;
     
     if (average > 1.0 || average < 0.0) {
       throw new IllegalArgumentException("average is not between 0.0 and 1.0!");
@@ -182,11 +205,6 @@ abstract class APixel implements IPixel {
   // computes the brightness of the pixel to the right of this one
   public double rightPixelBrightness() {
     return this.right.brightness();
-  }
-  
-  // removes this node from the list and returns this value
-  public abstract void remove() {
-    // change links
   }
 }
 
@@ -340,19 +358,32 @@ class Grid implements Iterable<APixel> {
 
   // EFFECT: adds a pixel of the given color to the end of the specified row
   void addPixel(int row, Color color) {
-    // insert new node after sentinel
-    SentinelColumnIt rowNum = new SentinelColumnIt(this.corner.down);
-    int currRow = 0;
-    APixel rowToAddTo = rowNum.next();
-    while (rowNum.hasNext() && currRow < row) {
-      rowToAddTo = rowNum.next();
-      currRow++;
+    // check if establishing first row
+    // add sentinels for each pixel added
+    if (row == 0) {
+      // add sentinel edge 
+      this.corner.left.insertSentinelRight();
+      this.corner.up.insertSentinelBelow();
+      // add the pixel
+      APixel firstRow = this.corner.down;
+      firstRow.left.insertRight(color);
+    } else {
+      // insert new node after sentinel
+      SentinelColumnIt rowNum = new SentinelColumnIt(this.corner.down);
+      int currRow = 0;
+      APixel rowToAddTo = rowNum.next();
+      while (rowNum.hasNext() && currRow < row) {
+        rowToAddTo = rowNum.next();
+        currRow++;
+      }
+      // check if row exists
+      if (currRow < row) {
+        // add new sentinel below
+        rowToAddTo.insertSentinelBelow();
+        rowToAddTo = rowToAddTo.down;
+      }
+      rowToAddTo.left.insertRight(color);
     }
-    // check if row exists
-    if (currRow < row) {
-      // add new sentinels
-    }
-    rowToAddTo.left.insertRight(color);
   }
 
   // removes the first node from this list and returns that node value
