@@ -1,77 +1,7 @@
 import java.util.Iterator;
-import tester.*;
-import javalib.impworld.*;
 import java.awt.Color;
 import java.util.ArrayList;
-import javalib.impworld.*;
 import javalib.worldimages.*; 
-
-// runs seam carving on an image
-class SeamCarving extends World {
-  // get image from file
-  FromFileImage fileImage;
-
-  // the width of the image
-  int imageWidth;
-  // the height of the image
-  int imageHeight;
-
-  // the grid corresponding with the carved image
-  Grid imageGrid;
-
-  // the constructor
-  SeamCarving(FromFileImage image) {
-    this.fileImage = image;
-    this.imageWidth = (int) fileImage.getWidth();
-    this.imageHeight = (int) fileImage.getHeight();
-    // turn image into a grid of pixels
-    imageGrid = new Grid();
-
-    // for every column in the image, set the color of file image pixel into
-    // a new Pixel in the grid
-    for (int row = 0; row < imageHeight; row += 1) {
-      // for every pixel in this file image row, make a new pixel of that color
-      // and add it to the grid
-      for (int rowIndex = 0; rowIndex < imageWidth; rowIndex += 1) {
-        // add pixel to grid row
-        this.imageGrid.addPixel(row, fileImage.getColorAt(row, rowIndex));
-      }
-    }
-    // fix links
-    this.imageGrid.fixLinks();
-  }
-
-  // draws the image
-  public WorldScene makeScene() {
-    WorldScene s = new WorldScene(this.imageWidth, this.imageHeight);
-    s.placeImageXY(this.imageGrid.draw(), imageWidth / 2, imageHeight / 2);
-    return s;
-  }
-
-  // on every tick, computes minimum seam and removes it from the image, 
-  // resulting in an empty image
-  public void onTick() {
-    this.imageGrid.removeMinimumSeam();
-    this.makeScene();
-    // save image as a file
-    // saveImage(String filename)
-  }
-}
-
-class ExamplesSeamCarving {
-  // the width of the canvas
-  static final int WIDTH = 1000;
-  // the height of the canvas
-  static final int HEIGHT = 800;
-
-  FromFileImage fileImage = new FromFileImage("image/balloons.jpg");
-  SeamCarving sc = new SeamCarving(fileImage);
-
-  void testBigBang(Tester t) {
-    double tickRate = 1;
-    sc.bigBang(WIDTH, HEIGHT, tickRate);
-  }
-}
 
 // represents a pixel in a grid
 interface IPixel {
@@ -114,15 +44,6 @@ abstract class APixel implements IPixel {
   APixel left;
   // the pixel to the right of this one
   APixel right;
-  // preserve structural invariant
-  // the pixel to the topleft of this one
-  APixel topLeft;
-  // the pixel to the topright of this one
-  APixel topRight;
-  // the pixel downleft of this one
-  APixel downLeft;
-  // the pixel downright of this one
-  APixel downRight;
 
   // inserts a new pixel to the right of this pixel
   public void insertRight(Color color) {
@@ -229,10 +150,7 @@ class Pixel extends APixel {
     this.down = down;
     this.left = left;
     this.right = right;
-    this.topLeft = up.left;
-    this.topRight = up.right;
-    this.downLeft = down.left;
-    this.downRight = down.right;
+
     // update other nodes to refer to this node
     this.right.left = this;
     this.left.right = this;
@@ -277,7 +195,6 @@ class Pixel extends APixel {
     this.left.right = this.right;
     this.up.down = this.right;
     this.down.up = this.right;
-    // change diagonal links?
   }
 }
 
@@ -324,7 +241,7 @@ class SentinelCorner extends APixel {
 }
 
 // represents an image as a grid of pixels
-class Grid implements Iterable<APixel> {
+class Grid implements Iterable<Pixel> {
   // the start and ends of the grid
   // a list of rows and columns (the corner)
   SentinelCorner corner;
@@ -345,13 +262,13 @@ class Grid implements Iterable<APixel> {
   }
 
   // returns an iterator that iterates right to access columns
-  public Iterator<APixel> iterator() {
+  public Iterator<Pixel> iterator() {
     // forward as default
     return new RightIterator(this.corner);
   }
 
   // returns an iterator that iterates down to access rows
-  public Iterator<APixel> verticalIterator() {
+  public Iterator<Pixel> verticalIterator() {
     // forward as default
     return new DownIterator(this.corner);
   }
@@ -367,11 +284,17 @@ class Grid implements Iterable<APixel> {
       // add the pixel
       APixel firstRow = this.corner.down;
       firstRow.left.insertRight(color);
-    } else {
+      this.width++;
+      this.height++;
+      
+      fixLinks(firstRow);
+    } 
+    
+    else {
       // insert new node after sentinel
       SentinelColumnIt rowNum = new SentinelColumnIt(this.corner.down);
       int currRow = 0;
-      APixel rowToAddTo = rowNum.next();
+      APixel rowToAddTo = this.corner.down;
       while (rowNum.hasNext() && currRow < row) {
         rowToAddTo = rowNum.next();
         currRow++;
@@ -381,8 +304,11 @@ class Grid implements Iterable<APixel> {
         // add new sentinel below
         rowToAddTo.insertSentinelBelow();
         rowToAddTo = rowToAddTo.down;
+        this.height++;
       }
       rowToAddTo.left.insertRight(color);
+      
+      fixLinks(rowToAddTo);
     }
   }
 
@@ -400,8 +326,20 @@ class Grid implements Iterable<APixel> {
     ArrayList<ArrayList<Pixel>> pixelPaths = new ArrayList<ArrayList<Pixel>>();
     // two arraylists whose indexes corresponding with one another?
     ArrayList<ArrayList<Double>> energyPaths = new ArrayList<ArrayList<Double>>();
-
-    // check if arraylists are empty first?
+    
+    
+    ArrayList<Pixel> inner1 = new ArrayList<Pixel>();
+    ArrayList<Double> inner2 = new ArrayList<Double>();
+        
+    // accumulates the pixel and their energies into the lists
+    while (this.iterator().hasNext()) {
+      inner1.add(this.iterator().next());
+      inner2.add(this.iterator().next().totalEnergy());
+    }
+    
+    energyPaths.add(inner2);
+    pixelPaths.add(inner1);
+    
 
     // look at SeamInfo of three upper neighbors
     double topLeftEnergy = 0;
@@ -481,7 +419,7 @@ class Grid implements Iterable<APixel> {
     // parse through seam list and find minimum energy seam
     for (int i = 0; i < seams.size(); i++) {
       currSeam = seams.get(i);
-      if(currSeam.hasLessEnergy(minSeam)) {
+      if (currSeam.hasLessEnergy(minSeam)) {
         minSeam = currSeam;
       }
     }
@@ -491,6 +429,11 @@ class Grid implements Iterable<APixel> {
   
   // draws this grid as a pixel image
   WorldImage draw() {
+    // check this image grid's size
+    if (this.width <= 0 || this.height <= 0) {
+      return new EmptyImage();
+    }
+    // convert grid to image
     ComputedPixelImage carvedImage = new ComputedPixelImage(this.width, this.height);
     // setPixel(int column, int row, Color c)
 
@@ -512,21 +455,69 @@ class Grid implements Iterable<APixel> {
     }
     return carvedImage;
   }
+
+  // fixes the links of the new pixel
+  public void fixLinks(APixel pixel) {
+    
+    APixel up = pixel.up;
+    APixel down = pixel.down;
+    
+    //pixel.topLeft = up.left;
+    //pixel.topRight = up.right;
+    //pixel.downLeft = down.left;
+    //pixel.downRight = down.right;
+  }
+
 }
 
-// represents an iterator that iterates through a column of sentinels (keeps track of row)
-class SentinelColumnIt implements Iterator<APixel> {
+// represents a generic iterator that goes through in the list of pixels
+abstract class GridIterator implements Iterator {
   // the list to iterate through
   APixel source;
 
   // the constructor
-  SentinelColumnIt(APixel source) {
+  GridIterator(APixel source) {
     this.source = source;
   }
 
   // checks whether there exists a next node
   public boolean hasNext() {
+    // check if next one is a node or goes back to sentinel:
+    return this.source instanceof Pixel;
+  }
+
+  // removes this node from the list
+  public void remove() {
+    this.source.remove();
+  }
+}
+
+// represents a generic iterator that iterates through sentinels 
+abstract class SentinelIt implements Iterator<APixel> {
+  // the list to iterate through
+  APixel source;
+
+  // the constructor
+  SentinelIt(APixel source) {
+    this.source = source;
+  }
+
+  // checks whether next node is still an edge sentinel or not
+  public boolean hasNext() {
     return this.source instanceof SentinelEdge;
+  }
+
+  // removes this node from the list
+  public void remove() {
+    this.source.remove();
+  }
+}
+
+// represents an iterator that iterates through a column of sentinels (keeps track of row)
+class SentinelColumnIt extends SentinelIt {
+  // the constructor
+  SentinelColumnIt(APixel source) {
+    super(source);
   }
 
   // retrieves this pixel's color and goes on to the next
@@ -539,26 +530,16 @@ class SentinelColumnIt implements Iterator<APixel> {
     this.source = pixel.advanceDown();
     return pixel;
   }
-
-  // removes this node from the list
-  public void remove() {
-    this.source.remove();
-  }
 }
 
 // represents an iterator that iterates through a row of sentinels (keeps track of column)
-class SentinelRowIt implements Iterator<APixel> {
+class SentinelRowIt extends SentinelIt {
   // the list to iterate through
   APixel source;
 
   // the constructor
   SentinelRowIt(APixel source) {
-    this.source = source;
-  }
-
-  // checks whether there exists a next node
-  public boolean hasNext() {
-    return this.source instanceof SentinelEdge;
+    super(source);
   }
 
   // retrieves this pixel's color and goes on to the next
@@ -571,27 +552,16 @@ class SentinelRowIt implements Iterator<APixel> {
     this.source = pixel.advanceRight();
     return pixel;
   }
-
-  // removes this node from the list
-  public void remove() {
-    this.source.remove();
-  }
 }
 
 // represents an iterator that goes forward in the list of pixels
-class RightIterator implements Iterator {
+class RightIterator extends GridIterator {
   // the list to iterate through
   APixel source;
 
   // the constructor
   RightIterator(APixel source) {
-    this.source = source;
-  }
-
-  // checks whether there exists a next node
-  public boolean hasNext() {
-    // check if next one is a node or goes back to sentinel:
-    return this.source instanceof Pixel;
+    super(source);
   }
 
   // retrieves this pixel's color and goes on to the next
@@ -605,30 +575,19 @@ class RightIterator implements Iterator {
     this.source = abstractPixelAsPixel.advanceRight();
     return color;
   }
-
-  // removes this node from the list
-  public void remove() {
-    this.source.remove();
-  }
 }
 
 // represents an iterator that goes down in a column of pixels
-class DownIterator implements Iterator {
+class DownIterator extends GridIterator {
   // the list to iterate through
   APixel source;
 
   // the constructor
   DownIterator(APixel source) {
-    this.source = source;
+    super(source);
   }
 
-  // checks whether there exists a next node
-  public boolean hasNext() {
-    // check if next one is a node or goes back to sentinel:
-    return this.source instanceof Pixel;
-  }
-
-  // retrieves this pixel's energy and goes on to the next
+  // retrieves this pixel's color and goes on to the next
   public Color next() {
     // checks if there are elements
     if (!this.hasNext()) { // next one is sentinel
@@ -636,13 +595,8 @@ class DownIterator implements Iterator {
     }
     Pixel abstractPixelAsPixel = (Pixel) source;
     Color color = abstractPixelAsPixel.color;
-    this.source = abstractPixelAsPixel.advanceRight();
+    this.source = abstractPixelAsPixel.advanceDown();
     return color;
-  }
-
-  // removes this node from the list
-  public void remove() {
-    this.source.remove();
   }
 }
 
@@ -664,8 +618,8 @@ class SeamInfo {
   // the constructor
   SeamInfo(Pixel pixel, double totalWeight, SeamInfo cameFrom) {
     this.pixel = pixel;
-    this.totalWeight = pixel.totalEnergy();
-    this.cameFrom = cameFrom;
+    this.totalWeight = totalWeight;
+    this.cameFrom = null;
   }
 
   // removes this seam
@@ -673,9 +627,12 @@ class SeamInfo {
     // iterate through grid and relink pixels while there are still pixels
     // in this seam
     SeamInfo currSeam = this;
+    // while there is still a pixel in the seam, remove each pixel in this seam
     while (currSeam.cameFrom != null) {
       currSeam.pixel.remove();
+      currSeam = currSeam.cameFrom;
     }
+    currSeam.pixel.remove();
     return this;
   }
 
