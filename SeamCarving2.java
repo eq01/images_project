@@ -45,10 +45,10 @@ class SeamCarving extends World {
   // on every tick, computes minimum seam and removes it from the image,
   // resulting in an empty image
   public void onTick() {
-    this.imageGrid.removeMinimumSeam();
-    this.imageGrid.draw();
+    //this.imageGrid.removeMinimumSeam();
+    //this.imageGrid.draw();
     // save image as a file
-    this.saveImage("img");
+    //this.saveImage("img");
   }
 
   // based on the key pressed, allows user to pause and unpause removal of seams,
@@ -75,7 +75,7 @@ class SeamCarving extends World {
 // testing class: SeamCarving
 class ExamplesSeamCarving {
   // the width of the canvas
-  static final int WIDTH = 1000;
+  static final int WIDTH = 1250;
   // the height of the canvas
   static final int HEIGHT = 800;
   // the image to carve

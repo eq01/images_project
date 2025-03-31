@@ -5,10 +5,10 @@ import javalib.worldimages.*;
 
 // represents a pixel in a grid
 interface IPixel {
-  // inserts a new node with the given value after this node
+  // inserts a new node with the given color after this node
   public void insertRight(Color color);
 
-  // inserts a new node with the given value after this node
+  // inserts a new node with the given color after this node
   public void insertBelow(Color color);
 
   // inserts a new edge sentinel to the right of this pixel node
@@ -57,7 +57,7 @@ abstract class APixel implements IPixel {
   // inserts a new pixel below this pixel
   public void insertBelow(Color color) {
     // make new node
-    Pixel newPixel = new Pixel(color, this, this.down, this.left, this.right);
+    Pixel newPixel = new Pixel(color, this, this.down, this.left.down, this.right.down);
     // update this node's links
     this.down = newPixel;
     // also the diagonals!!!!!!!!
@@ -138,11 +138,27 @@ class Pixel extends APixel {
     this.color = color;
   }
 
+  // convenience constructor that takes in left and right pixel
+  Pixel(Color color, APixel left, APixel right) {
+    super();
+    if (left == null || right == null) {
+      throw new IllegalArgumentException("given pixels are null.");
+    }
+    
+    this.color = color;
+    this.left = left;
+    this.right = right;
+
+    // update other nodes to refer to this node
+    this.right.left = this;
+    this.left.right = this;
+  }
+
   // convenience constructor
   Pixel(Color color, APixel up, APixel down, APixel left, APixel right) {
     super();
     if (up == null || down == null || left == null || right == null) {
-      throw new IllegalArgumentException("given nodes are null.");
+      throw new IllegalArgumentException("given pixels are null.");
     }
     
     this.color = color;
@@ -193,8 +209,9 @@ class Pixel extends APixel {
   public void remove() {
     // change links
     this.left.right = this.right;
-    this.up.down = this.right;
-    this.down.up = this.right;
+    this.up.down = this.down;
+    this.down.up = this.up;
+    this.right.left = this.left;
   }
 }
 
@@ -209,20 +226,22 @@ class SentinelEdge extends APixel {
     this.down = this;
     this.left = this;
     this.right = this;
-
-    // plus others
   }
 
-  // throws exception when removal of this node from this empty list is tried
+  // removes this edge pixel from the grid
   public void remove() {
-    throw new RuntimeException("Can't remove from an empty list.");
+    // change links
+    this.left.right = this.right;
+    this.up.down = this.down;
+    this.down.up = this.up;
+    this.right.left = this.left;
   }
 }
 
 // represents a pixel at the corner of the image (black pixel)
 class SentinelCorner extends APixel {
   // constructor that takes in zero arguments and initializes
-  // next and previous to itself
+  // all directional links to itself
   SentinelCorner() {
     super();
     this.color = Color.BLACK;
@@ -230,18 +249,36 @@ class SentinelCorner extends APixel {
     this.down = this;
     this.left = this;
     this.right = this;
+  }
 
-    // plus others
+  // throws an exception when attempting to link a regular pixel to this since
+  // the corner should only be able to add sentinel edges to its direct links
+  public void insertRight(Color color) {
+    throw new RuntimeException("Can only add edges to corner.");
+  }
+
+  // throws an exception when attempting to link a regular pixel to this since
+  // the corner should only be able to add sentinel edges to its direct links
+  public void insertBelow(Color color) {
+    throw new RuntimeException("Can only add edges to corner.");
   }
 
   // throws exception when removal of this node from this empty list is tried
   public void remove() {
-    throw new RuntimeException("Can't remove from an empty list.");
+    throw new RuntimeException("Can't remove from an empty grid.");
+  }
+
+  // checks whether this sentinel links to other pixels
+  public boolean hasPixels() {
+    if (this.right == this && this.down == this) {
+      return false;
+    }
+    return true;
   }
 }
 
 // represents an image as a grid of pixels
-class Grid implements Iterable<Pixel> {
+class Grid implements Iterable<APixel> {
   // the start and ends of the grid
   // a list of rows and columns (the corner)
   SentinelCorner corner;
@@ -262,41 +299,39 @@ class Grid implements Iterable<Pixel> {
   }
 
   // returns an iterator that iterates right to access columns
-  public Iterator<Pixel> iterator() {
+  public Iterator<APixel> iterator() {
     // forward as default
     return new RightIterator(this.corner);
   }
 
   // returns an iterator that iterates down to access rows
-  public Iterator<Pixel> verticalIterator() {
+  public Iterator<APixel> verticalIterator() {
     // forward as default
     return new DownIterator(this.corner);
   }
 
   // EFFECT: adds a pixel of the given color to the end of the specified row
   void addPixel(int row, Color color) {
-    // check if establishing first row
-    // add sentinels for each pixel added
-    if (row == 0) {
-      // add sentinel edge 
+    APixel rowToAddTo = this.corner.down;
+    // check if establishing first pixel
+    if (!this.corner.hasPixels()) {
       this.corner.left.insertSentinelRight();
-      this.corner.up.insertSentinelBelow();
-      // add the pixel
-      APixel firstRow = this.corner.down;
-      firstRow.left.insertRight(color);
       this.width++;
+      this.corner.up.insertSentinelBelow();
       this.height++;
-      
-      fixLinks(firstRow);
-    } 
-    
+    }
+    else if (row == 0) { // first row establishes width of grid
+      // make more edge sentinels for the row
+      this.corner.left.insertSentinelRight();
+      rowToAddTo.left.insertRight(color);
+      this.width++;
+    }
     else {
       // insert new node after sentinel
-      SentinelColumnIt rowNum = new SentinelColumnIt(this.corner.down);
+      SentinelColumnIt it = new SentinelColumnIt(this.corner.down);
       int currRow = 0;
-      APixel rowToAddTo = this.corner.down;
-      while (rowNum.hasNext() && currRow < row) {
-        rowToAddTo = rowNum.next();
+      while (it.hasNext() && currRow < row) {
+        rowToAddTo = it.next();
         currRow++;
       }
       // check if row exists
@@ -306,21 +341,22 @@ class Grid implements Iterable<Pixel> {
         rowToAddTo = rowToAddTo.down;
         this.height++;
       }
+      // need to check that all row lengths are the same
       rowToAddTo.left.insertRight(color);
-      
-      fixLinks(rowToAddTo);
     }
+    // fix links here or once it's all done for more efficient?
+    this.fixLinks(rowToAddTo.right);
   }
 
-  // removes the first node from this list and returns that node value
+  // EFFECT: removes the first node from this list and returns that node value
   // if there's only one seam to remove, remove it and leave an empty image
   void removeMinimumSeam() {
     SeamInfo seamToRemove = this.minimumSeam();
-    // remove it through delegation
+    // remove it through delegation and mutate this grid
     seamToRemove.removeSeam();
   }
 
-  // computes the minimum
+  // computes the minimum seam of this grid
   SeamInfo minimumSeam() {
     // construct array list of the pixels of this grid
     ArrayList<ArrayList<Pixel>> pixelPaths = new ArrayList<ArrayList<Pixel>>();
@@ -332,10 +368,10 @@ class Grid implements Iterable<Pixel> {
     ArrayList<Double> inner2 = new ArrayList<Double>();
         
     // accumulates the pixel and their energies into the lists
-    while (this.iterator().hasNext()) {
+    /*while (this.iterator().hasNext()) {
       inner1.add(this.iterator().next());
       inner2.add(this.iterator().next().totalEnergy());
-    }
+    }*/
     
     energyPaths.add(inner2);
     pixelPaths.add(inner1);
@@ -439,18 +475,20 @@ class Grid implements Iterable<Pixel> {
 
     int columnIndex = 0;
     int rowIndex = 0;
-    SentinelRowIt numOfColumnsIt = new SentinelRowIt(this.corner.right);
+    SentinelColumnIt rowNum = new SentinelColumnIt(this.corner.down);
 
     // for every column of this grid, iterate vertically and set pixel image color
     // to color of grid pixel
-    while (numOfColumnsIt.hasNext()) {
-      APixel columnStart = numOfColumnsIt.next().down;
-      DownIterator columnIt = new DownIterator(columnStart);
-      // set pixels 
-      while (columnIt.hasNext()) {
-        carvedImage.setPixel(columnIndex, rowIndex, columnIt.next());
+    while (rowNum.hasNext()) {
+      APixel rowPixel = rowNum.next().right;
+      RightIterator rowIt = new RightIterator(rowPixel);
+      // set pixels in the current row
+      while (rowIt.hasNext()) {
+        carvedImage.setPixel(columnIndex, rowIndex, rowPixel.color);
+        rowPixel = rowIt.next();
         rowIndex++;
       }
+      rowIndex = 0;
       columnIndex++;
     }
     return carvedImage;
@@ -459,19 +497,17 @@ class Grid implements Iterable<Pixel> {
   // fixes the links of the new pixel
   public void fixLinks(APixel pixel) {
     
-    APixel up = pixel.up;
-    APixel down = pixel.down;
-    
-    //pixel.topLeft = up.left;
-    //pixel.topRight = up.right;
-    //pixel.downLeft = down.left;
-    //pixel.downRight = down.right;
+    APixel left = pixel.left;
+    APixel top = left.up.right;
+
+    top.down = pixel;
+    pixel.up = top;
   }
 
 }
 
 // represents a generic iterator that goes through in the list of pixels
-abstract class GridIterator implements Iterator {
+abstract class GridIterator implements Iterator<APixel> {
   // the list to iterate through
   APixel source;
 
@@ -565,15 +601,15 @@ class RightIterator extends GridIterator {
   }
 
   // retrieves this pixel's color and goes on to the next
-  public Color next() {
+  public Pixel next() {
     // checks if there are elements
     if (!this.hasNext()) { // next one is sentinel
       throw new RuntimeException("No elements to iterate through.");
     }
     Pixel abstractPixelAsPixel = (Pixel) source;
-    Color color = abstractPixelAsPixel.color;
+    //Color color = abstractPixelAsPixel.color;
     this.source = abstractPixelAsPixel.advanceRight();
-    return color;
+    return abstractPixelAsPixel;
   }
 }
 
@@ -588,15 +624,15 @@ class DownIterator extends GridIterator {
   }
 
   // retrieves this pixel's color and goes on to the next
-  public Color next() {
+  public Pixel next() {
     // checks if there are elements
     if (!this.hasNext()) { // next one is sentinel
       throw new RuntimeException("No elements to iterate through.");
     }
     Pixel abstractPixelAsPixel = (Pixel) source;
-    Color color = abstractPixelAsPixel.color;
+    //Color color = abstractPixelAsPixel.color;
     this.source = abstractPixelAsPixel.advanceDown();
-    return color;
+    return abstractPixelAsPixel;
   }
 }
 
