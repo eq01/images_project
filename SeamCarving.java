@@ -1,7 +1,10 @@
+import tester.*;
 import java.util.Iterator;
 import java.awt.Color;
 import java.util.ArrayList;
 import javalib.worldimages.*; 
+import javalib.funworld.*;
+import javalib.worldcanvas.WorldCanvas;
 
 // represents a pixel in a grid
 interface IPixel {
@@ -12,10 +15,10 @@ interface IPixel {
   public void insertBelow(Color color);
 
   // inserts a new edge sentinel to the right of this pixel node
-  public void insertSentinelRight();
+  public SentinelEdge insertSentinelRight();
 
   // inserts a new edge sentinel below this pixel node
-  public void insertSentinelBelow();
+  public SentinelEdge insertSentinelBelow();
 
   // removes this node from the list and returns this value
   public void remove();
@@ -64,19 +67,21 @@ abstract class APixel implements IPixel {
   }
 
   // inserts a new edge sentinel to the right of this pixel node
-  public void insertSentinelRight() {
+  public SentinelEdge insertSentinelRight() {
     SentinelEdge sentinel = new SentinelEdge();
     this.right = sentinel;
     sentinel.left = this;
     sentinel.right = this.right;
+    return sentinel;
   }
 
   // inserts a new edge sentinel below this pixel node
-  public void insertSentinelBelow() {
+  public SentinelEdge insertSentinelBelow() {
     SentinelEdge sentinel = new SentinelEdge();
     this.down = sentinel;
     sentinel.up = this;
     sentinel.down = this.down;
+    return sentinel;
   }
 
   // given this node, advance one step right, returns the next node 
@@ -337,8 +342,7 @@ class Grid implements Iterable<APixel> {
       // check if row exists
       if (currRow < row) {
         // add new sentinel below
-        rowToAddTo.insertSentinelBelow();
-        rowToAddTo = rowToAddTo.down;
+        rowToAddTo = rowToAddTo.insertSentinelBelow();
         this.height++;
       }
       // need to check that all row lengths are the same
@@ -464,9 +468,9 @@ class Grid implements Iterable<APixel> {
   }
   
   // draws this grid as a pixel image
-  WorldImage draw() {
+  WorldImage render() {
     // check this image grid's size
-    if (this.width <= 0 || this.height <= 0) {
+    if (this.width <= 0 && this.height <= 0) {
       return new EmptyImage();
     }
     // convert grid to image
@@ -475,21 +479,23 @@ class Grid implements Iterable<APixel> {
 
     int columnIndex = 0;
     int rowIndex = 0;
-    SentinelColumnIt rowNum = new SentinelColumnIt(this.corner.down);
+    SentinelColumnIt rowsIt = new SentinelColumnIt(this.corner.down);
+    APixel rowPixel = this.corner.down;
 
-    // for every column of this grid, iterate vertically and set pixel image color
-    // to color of grid pixel
-    while (rowNum.hasNext()) {
-      APixel rowPixel = rowNum.next().right;
+    // for every row of this grid, iterate through each pixel in the row and set 
+    // pixel image color to color of grid pixel
+    while (rowsIt.hasNext()) {
+      rowPixel = rowPixel.right;
       RightIterator rowIt = new RightIterator(rowPixel);
       // set pixels in the current row
       while (rowIt.hasNext()) {
-        carvedImage.setPixel(columnIndex, rowIndex, rowPixel.color);
+        carvedImage.setPixel(rowIndex, columnIndex, rowPixel.color);
         rowPixel = rowIt.next();
         rowIndex++;
       }
       rowIndex = 0;
       columnIndex++;
+      rowPixel = rowsIt.next();
     }
     return carvedImage;
   }
@@ -677,4 +683,104 @@ class SeamInfo {
   boolean hasLessEnergy(SeamInfo that) {
     return totalWeight < that.totalWeight;
   }
+}
+
+class ExamplesImages {
+  APixel se = new SentinelEdge();
+  
+  APixel sc = new SentinelCorner();
+
+  APixel p1 = new Pixel (Color.pink, sc, se, sc, se);
+  APixel p2 = new Pixel (Color.pink, sc, p1, sc, se);
+
+
+  APixel p3 = new Pixel(Color.blue);
+  APixel p4 = new Pixel(Color.gray);
+  APixel p5 = new Pixel(Color.red);
+
+  
+  Grid gridEmpty;
+  Grid nonEmpty;
+
+  Pixel blue;
+  Pixel red;
+  Pixel yellow;
+
+  void initData() {
+    gridEmpty = new Grid();
+    blue = new Pixel(Color.BLUE);
+    red = new Pixel(Color.RED);
+    yellow = new Pixel(Color.YELLOW);
+  }
+
+  // tests adding pixels to a Grid
+  void testAddPixel(Tester t) {
+    this.initData();
+    t.checkExpect(gridEmpty, new Grid());
+
+    // add one pixel
+    gridEmpty.addPixel(0, Color.BLUE);
+    SentinelCorner corner = new SentinelCorner();
+    SentinelEdge rightSent = corner.insertSentinelRight();
+    SentinelEdge downSent = corner.insertSentinelBelow();
+    corner.right.down = blue;
+    corner.down.right = blue;
+    blue.up = rightSent;
+    blue.down = rightSent;
+    blue.left = downSent;
+    blue.right = downSent;
+    Grid expected = new Grid(corner);
+    t.checkExpect(gridEmpty, expected);
+
+    // add another pixel to same row
+    gridEmpty.addPixel(0, Color.RED);
+    SentinelEdge rightSent2 = rightSent.insertSentinelRight();
+    rightSent2.down = red;
+    blue.right = red;
+    red.left = blue;
+    red.up = rightSent2;
+    red.right = downSent;
+    red.down = rightSent2;
+    t.checkExpect(gridEmpty, expected);
+
+    // add pixel to new row
+    gridEmpty.addPixel(1, Color.YELLOW);
+    SentinelEdge downSent2 = downSent.insertSentinelBelow();
+    downSent2.right = yellow;
+    blue.down = yellow;
+    yellow.left = downSent2;
+    yellow.up = blue;
+    yellow.right = downSent2;
+    yellow.down = rightSent;
+    t.checkExpect(gridEmpty, expected);
+  }
+
+  void testDraw(Tester t) {
+    WorldCanvas c = new WorldCanvas(1250, 750);
+    WorldScene s = new WorldScene(1250, 750);
+    
+    this.initData();
+    ComputedPixelImage expected = new ComputedPixelImage(2, 2);
+    expected.setColorAt(0, 0, Color.BLUE);
+    expected.setColorAt(1, 0, Color.RED);
+    expected.setColorAt(0, 1, Color.YELLOW);
+
+    gridEmpty.addPixel(0, Color.BLUE);
+    gridEmpty.addPixel(0, Color.RED);
+    gridEmpty.addPixel(1, Color.YELLOW);
+    t.checkExpect(gridEmpty.render(), expected);
+    boolean hi = c.drawScene(s.placeImageXY(new ScaleImage(expected, 100), 625, 375)) && c.show();
+  }
+
+  // test brightness method
+  /*void testBrightness(Tester t) {
+    t.checkException(new IllegalArgumentException("average is not between 0.0 and 1.0!"), p4, "brightness");
+ 
+    t.checkExpect(this.p3.brightness(), 1.0);
+    t.checkExpect(this.p5.brightness(), 1.0);
+  }
+
+  void testVerticalEnergy(Tester t) {
+    //return t.checkExpect(null, null);
+  }*/
 }

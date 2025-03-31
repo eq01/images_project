@@ -4,6 +4,11 @@ import tester.*;
 
 // runs seam carving on an image
 class SeamCarving extends World {
+  // width of canvas
+  static final int WIDTH = 1250;
+  // height of canvas
+  static final int HEIGHT = 800;
+
   // get image from file
   FromFileImage fileImage;
 
@@ -21,7 +26,7 @@ class SeamCarving extends World {
     this.imageWidth = (int) fileImage.getWidth();
     this.imageHeight = (int) fileImage.getHeight();
     // turn image into a grid of pixels
-    imageGrid = new Grid();
+    this.imageGrid = new Grid();
 
     // for every row in the image, set the color of file image pixel into
     // a new Pixel in the grid
@@ -37,8 +42,8 @@ class SeamCarving extends World {
 
   // draws the image carving
   public WorldScene makeScene() {
-    WorldScene s = new WorldScene(this.imageWidth, this.imageHeight);
-    s.placeImageXY(this.imageGrid.draw(), imageWidth / 2, imageHeight / 2);
+    WorldScene s = new WorldScene(WIDTH, HEIGHT);
+    s.placeImageXY(this.imageGrid.render(), WIDTH / 2, HEIGHT / 2);
     return s;
   }
 
