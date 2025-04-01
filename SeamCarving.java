@@ -33,6 +33,12 @@ interface IPixel {
 
   // calculates the brightness of this pixel
   double brightness();
+
+  // links this pixel's left link to the given pixel
+  void fixLeftLink(APixel pixel);
+
+  // links this pixel's up link to the given pixel
+  void fixUpLink(APixel pixel);
 }
 
 // the implementations of a pixel in a grid
@@ -51,8 +57,9 @@ abstract class APixel implements IPixel {
   // inserts a new pixel to the right of this pixel
   public void insertRight(Color color) {
     // make new node
-    Pixel newPixel = new Pixel(color, this.up, this.down, this, this.right);
+    Pixel newPixel = new Pixel(color, this.up.right, this.down.right, this, this.right);
     // update this node's links
+    //this.right.fixLeftLink(newPixel);
     this.right = newPixel;
     // also the diagonals!!!!!!!!
   }
@@ -62,6 +69,7 @@ abstract class APixel implements IPixel {
     // make new node
     Pixel newPixel = new Pixel(color, this, this.down, this.left.down, this.right.down);
     // update this node's links
+    //this.right.fixUpLink(newPixel);
     this.down = newPixel;
     // also the diagonals!!!!!!!!
   }
@@ -69,19 +77,33 @@ abstract class APixel implements IPixel {
   // inserts a new edge sentinel to the right of this pixel node
   public SentinelEdge insertSentinelRight() {
     SentinelEdge sentinel = new SentinelEdge();
-    this.right = sentinel;
+    //this.right.left = sentinel;
     sentinel.left = this;
     sentinel.right = this.right;
+    this.right.fixLeftLink(sentinel);
+    this.right = sentinel;
     return sentinel;
   }
 
   // inserts a new edge sentinel below this pixel node
   public SentinelEdge insertSentinelBelow() {
     SentinelEdge sentinel = new SentinelEdge();
-    this.down = sentinel;
+    //this.down.up = sentinel;
     sentinel.up = this;
     sentinel.down = this.down;
+    this.down.fixUpLink(sentinel);
+    this.down = sentinel;
     return sentinel;
+  }
+
+  // links this pixel's left link to the given pixel
+  public void fixLeftLink(APixel pixel) {
+    this.left = pixel;
+  }
+
+  // links this pixel's up link to the given pixel
+  public void fixUpLink(APixel pixel) {
+    this.up = pixel;
   }
 
   // given this node, advance one step right, returns the next node 
@@ -143,7 +165,7 @@ class Pixel extends APixel {
     this.color = color;
   }
 
-  // convenience constructor that takes in left and right pixel
+  // constructor given left and right pixels
   Pixel(Color color, APixel left, APixel right) {
     super();
     if (left == null || right == null) {
@@ -286,11 +308,11 @@ class SentinelCorner extends APixel {
 class Grid implements Iterable<APixel> {
   // the start and ends of the grid
   // a list of rows and columns (the corner)
-  SentinelCorner corner;
+  final SentinelCorner corner;
 
-  // the width of this grid
+  // the width of this grid (excluding sentinels)
   public int width;
-  // the height of this grid
+  // the height of this grid (excluding sentinels)
   public int height;
 
   // the constructor
@@ -317,39 +339,48 @@ class Grid implements Iterable<APixel> {
 
   // EFFECT: adds a pixel of the given color to the end of the specified row
   void addPixel(int row, Color color) {
-    APixel rowToAddTo = this.corner.down;
+    APixel rowToAddTo = this.corner;
     // check if establishing first pixel
     if (!this.corner.hasPixels()) {
-      this.corner.left.insertSentinelRight();
+      this.corner.insertSentinelRight();
       this.width++;
-      this.corner.up.insertSentinelBelow();
+
+      SentinelEdge downSent = this.corner.insertSentinelBelow();
+      this.corner.up = downSent;
       this.height++;
+      // add the first pixel
+      rowToAddTo = this.corner.advanceDown();
+      rowToAddTo.left.insertRight(color);
     }
     else if (row == 0) { // first row establishes width of grid
       // make more edge sentinels for the row
       this.corner.left.insertSentinelRight();
+      rowToAddTo = this.corner.advanceDown();
       rowToAddTo.left.insertRight(color);
+      //rowToAddTo.left = rowToAddTo.left.advanceRight();
       this.width++;
     }
+    else if (this.height <= row) {
+      // add new sentinel below
+      rowToAddTo = this.corner.up.insertSentinelBelow();
+      this.height++;
+      rowToAddTo.left.insertRight(color);
+    }
     else {
+      // find row to add pixel to
       // insert new node after sentinel
       SentinelColumnIt it = new SentinelColumnIt(this.corner.down);
+      rowToAddTo = corner.down;
       int currRow = 0;
       while (it.hasNext() && currRow < row) {
-        rowToAddTo = it.next();
+        rowToAddTo = rowToAddTo.advanceDown();
+        it.next();
         currRow++;
-      }
-      // check if row exists
-      if (currRow < row) {
-        // add new sentinel below
-        rowToAddTo = rowToAddTo.insertSentinelBelow();
-        this.height++;
       }
       // need to check that all row lengths are the same
       rowToAddTo.left.insertRight(color);
     }
-    // fix links here or once it's all done for more efficient?
-    this.fixLinks(rowToAddTo.right);
+    //this.fixLinks(rowToAddTo.right);
   }
 
   // EFFECT: removes the first node from this list and returns that node value
@@ -477,37 +508,36 @@ class Grid implements Iterable<APixel> {
     ComputedPixelImage carvedImage = new ComputedPixelImage(this.width, this.height);
     // setPixel(int column, int row, Color c)
 
-    int columnIndex = 0;
-    int rowIndex = 0;
-    SentinelColumnIt rowsIt = new SentinelColumnIt(this.corner.down);
-    APixel rowPixel = this.corner.down;
+    APixel rowPixel = this.corner.down; // start at first edge sentinel
 
     // for every row of this grid, iterate through each pixel in the row and set 
     // pixel image color to color of grid pixel
-    while (rowsIt.hasNext()) {
-      rowPixel = rowPixel.right;
-      RightIterator rowIt = new RightIterator(rowPixel);
-      // set pixels in the current row
-      while (rowIt.hasNext()) {
-        carvedImage.setPixel(rowIndex, columnIndex, rowPixel.color);
-        rowPixel = rowIt.next();
-        rowIndex++;
+    for (int row = 0; row < this.height; row++) {
+      APixel curr = rowPixel.advanceRight();
+      for (int currPixel = 0; currPixel < this.width; currPixel++) {
+        carvedImage.setPixel(currPixel, row, curr.color);
+        curr = curr.advanceRight();
       }
-      rowIndex = 0;
-      columnIndex++;
-      rowPixel = rowsIt.next();
+      rowPixel = rowPixel.advanceDown();
     }
     return carvedImage;
   }
 
-  // fixes the links of the new pixel
+  // fixes the links of the row of the given pixel
   public void fixLinks(APixel pixel) {
-    
-    APixel left = pixel.left;
-    APixel top = left.up.right;
 
-    top.down = pixel;
-    pixel.up = top;
+    RightIterator it = new RightIterator(pixel);
+
+    while (it.hasNext()) {
+      APixel left = pixel.left;
+      APixel right = pixel.right;
+      APixel top = left.up.right;
+
+      top.down = pixel;
+      pixel.up = top;
+      right.left = pixel;
+      it.next();
+    }
   }
 
 }
@@ -576,9 +606,6 @@ class SentinelColumnIt extends SentinelIt {
 
 // represents an iterator that iterates through a row of sentinels (keeps track of column)
 class SentinelRowIt extends SentinelIt {
-  // the list to iterate through
-  APixel source;
-
   // the constructor
   SentinelRowIt(APixel source) {
     super(source);
@@ -598,9 +625,6 @@ class SentinelRowIt extends SentinelIt {
 
 // represents an iterator that goes forward in the list of pixels
 class RightIterator extends GridIterator {
-  // the list to iterate through
-  APixel source;
-
   // the constructor
   RightIterator(APixel source) {
     super(source);
@@ -621,9 +645,6 @@ class RightIterator extends GridIterator {
 
 // represents an iterator that goes down in a column of pixels
 class DownIterator extends GridIterator {
-  // the list to iterate through
-  APixel source;
-
   // the constructor
   DownIterator(APixel source) {
     super(source);
@@ -723,8 +744,10 @@ class ExamplesImages {
     SentinelCorner corner = new SentinelCorner();
     SentinelEdge rightSent = corner.insertSentinelRight();
     SentinelEdge downSent = corner.insertSentinelBelow();
-    corner.right.down = blue;
-    corner.down.right = blue;
+    corner.right = rightSent;
+    corner.down = downSent;
+    rightSent.down = blue;
+    downSent.right = blue;
     blue.up = rightSent;
     blue.down = rightSent;
     blue.left = downSent;
@@ -742,6 +765,7 @@ class ExamplesImages {
     red.right = downSent;
     red.down = rightSent2;
     t.checkExpect(gridEmpty, expected);
+    t.checkExpect(gridEmpty.width, 2);
 
     // add pixel to new row
     gridEmpty.addPixel(1, Color.YELLOW);
@@ -753,6 +777,7 @@ class ExamplesImages {
     yellow.right = downSent2;
     yellow.down = rightSent;
     t.checkExpect(gridEmpty, expected);
+    t.checkExpect(gridEmpty.height, 2);
   }
 
   void testDraw(Tester t) {
@@ -764,12 +789,15 @@ class ExamplesImages {
     expected.setColorAt(0, 0, Color.BLUE);
     expected.setColorAt(1, 0, Color.RED);
     expected.setColorAt(0, 1, Color.YELLOW);
+    expected.setColorAt(1, 1, Color.GREEN);
 
     gridEmpty.addPixel(0, Color.BLUE);
     gridEmpty.addPixel(0, Color.RED);
     gridEmpty.addPixel(1, Color.YELLOW);
+    gridEmpty.addPixel(1, Color.GREEN);
     t.checkExpect(gridEmpty.render(), expected);
-    boolean hi = c.drawScene(s.placeImageXY(new ScaleImage(expected, 100), 625, 375)) && c.show();
+    boolean hi = c.drawScene(s.placeImageXY(new ScaleImage(gridEmpty.render(), 50), 200, 375)) && c.show();
+    boolean hi2 = c.drawScene(s.placeImageXY(new ScaleImage(expected, 50), 700, 375)) && c.show();
   }
 
   // test brightness method
