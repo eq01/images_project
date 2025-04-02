@@ -5,13 +5,14 @@ import java.util.ArrayList;
 import javalib.worldimages.*; 
 import javalib.funworld.*;
 import javalib.worldcanvas.WorldCanvas;
+import java.util.function.*;
 
 // represents a pixel in a grid
 interface IPixel {
-  // inserts a new node with the given color after this node
+  // inserts a new pixel with the given color to the right of this pixel
   public void insertRight(Color color);
 
-  // inserts a new node with the given color after this node
+  // inserts a new pixel with the given color below this pixel
   public void insertBelow(Color color);
 
   // inserts a new edge sentinel to the right of this pixel node
@@ -20,14 +21,14 @@ interface IPixel {
   // inserts a new edge sentinel below this pixel node
   public SentinelEdge insertSentinelBelow();
 
-  // removes this node from the list and returns this value
+  // removes this pixel from the list
   public void remove();
 
-  // given this node, advance one step right, returns the next node 
+  // given this pixel, advance one step right, returns the next pixel 
   // in the list, if there is none, return itself
   IPixel advanceRight();
 
-  // given this node, advance one step down, returns the next node 
+  // given this pixel, advance one step down, returns the next pixel 
   // in the list, if there is none, return itself 
   IPixel advanceDown();
 
@@ -59,9 +60,7 @@ abstract class APixel implements IPixel {
     // make new node
     Pixel newPixel = new Pixel(color, this.up.right, this.down.right, this, this.right);
     // update this node's links
-    //this.right.fixLeftLink(newPixel);
     this.right = newPixel;
-    // also the diagonals!!!!!!!!
   }
 
   // inserts a new pixel below this pixel
@@ -69,15 +68,12 @@ abstract class APixel implements IPixel {
     // make new node
     Pixel newPixel = new Pixel(color, this, this.down, this.left.down, this.right.down);
     // update this node's links
-    //this.right.fixUpLink(newPixel);
     this.down = newPixel;
-    // also the diagonals!!!!!!!!
   }
 
   // inserts a new edge sentinel to the right of this pixel node
   public SentinelEdge insertSentinelRight() {
     SentinelEdge sentinel = new SentinelEdge();
-    //this.right.left = sentinel;
     sentinel.left = this;
     sentinel.right = this.right;
     this.right.fixLeftLink(sentinel);
@@ -88,7 +84,6 @@ abstract class APixel implements IPixel {
   // inserts a new edge sentinel below this pixel node
   public SentinelEdge insertSentinelBelow() {
     SentinelEdge sentinel = new SentinelEdge();
-    //this.down.up = sentinel;
     sentinel.up = this;
     sentinel.down = this.down;
     this.down.fixUpLink(sentinel);
@@ -106,13 +101,13 @@ abstract class APixel implements IPixel {
     this.up = pixel;
   }
 
-  // given this node, advance one step right, returns the next node 
+  // given this pixel, advance one step right, returns the next pixel 
   // in the list, if there is none, return itself
   public APixel advanceRight() {
     return this.right;
   }
 
-  // given this node, advance one step down, returns the next node 
+  // given this pixel, advance one step down, returns the next pixel 
   // in the list, if there is none, return itself 
   public APixel advanceDown() {
     return this.down;
@@ -156,7 +151,7 @@ abstract class APixel implements IPixel {
   }
 }
 
-// represents a pixel in an image
+// represents a colored pixel in an image
 class Pixel extends APixel {
 
   // the constructor
@@ -290,7 +285,7 @@ class SentinelCorner extends APixel {
     throw new RuntimeException("Can only add edges to corner.");
   }
 
-  // throws exception when removal of this node from this empty list is tried
+  // throws exception when removal of this corner from this empty grid is tried
   public void remove() {
     throw new RuntimeException("Can't remove from an empty grid.");
   }
@@ -328,13 +323,13 @@ class Grid implements Iterable<APixel> {
   // returns an iterator that iterates right to access columns
   public Iterator<APixel> iterator() {
     // forward as default
-    return new RightIterator(this.corner);
+    return new SentinelRowIt(this.corner);
   }
 
   // returns an iterator that iterates down to access rows
   public Iterator<APixel> verticalIterator() {
     // forward as default
-    return new DownIterator(this.corner);
+    return new SentinelColumnIt(this.corner);
   }
 
   // EFFECT: adds a pixel of the given color to the end of the specified row
@@ -357,7 +352,6 @@ class Grid implements Iterable<APixel> {
       this.corner.left.insertSentinelRight();
       rowToAddTo = this.corner.advanceDown();
       rowToAddTo.left.insertRight(color);
-      //rowToAddTo.left = rowToAddTo.left.advanceRight();
       this.width++;
     }
     else if (this.height <= row) {
@@ -372,6 +366,8 @@ class Grid implements Iterable<APixel> {
       SentinelColumnIt it = new SentinelColumnIt(this.corner.down);
       rowToAddTo = corner.down;
       int currRow = 0;
+      // while there still exists a row and current index is less than 
+      // row destination, advance to the next row
       while (it.hasNext() && currRow < row) {
         rowToAddTo = rowToAddTo.advanceDown();
         it.next();
@@ -380,38 +376,25 @@ class Grid implements Iterable<APixel> {
       // need to check that all row lengths are the same
       rowToAddTo.left.insertRight(color);
     }
-    //this.fixLinks(rowToAddTo.right);
   }
 
-  // EFFECT: removes the first node from this list and returns that node value
+  // EFFECT: removes the seam of the specified direction with least energy from this grid 
   // if there's only one seam to remove, remove it and leave an empty image
-  void removeMinimumSeam() {
-    SeamInfo seamToRemove = this.minimumSeam();
+  void removeMinimumSeam(String dir) {
+    SeamInfo seamToRemove = this.minimumSeam(dir);
+    seamToRemove.paintRed();
     // remove it through delegation and mutate this grid
     seamToRemove.removeSeam();
   }
 
-  // computes the minimum seam of this grid
-  SeamInfo minimumSeam() {
+  // computes the minimum seam of this grid of the specified direction 
+  // (horizontal/vertical)
+  SeamInfo minimumSeam(String dir) {
     // construct array list of the pixels of this grid
-    ArrayList<ArrayList<Pixel>> pixelPaths = new ArrayList<ArrayList<Pixel>>();
+    ArrayList<ArrayList<Pixel>> pixelPaths = this.gridToArrayListPixel();
     // two arraylists whose indexes corresponding with one another?
-    ArrayList<ArrayList<Double>> energyPaths = new ArrayList<ArrayList<Double>>();
+    ArrayList<ArrayList<Double>> energyPaths = this.gridToArrayListEnergy();
     
-    
-    ArrayList<Pixel> inner1 = new ArrayList<Pixel>();
-    ArrayList<Double> inner2 = new ArrayList<Double>();
-        
-    // accumulates the pixel and their energies into the lists
-    /*while (this.iterator().hasNext()) {
-      inner1.add(this.iterator().next());
-      inner2.add(this.iterator().next().totalEnergy());
-    }*/
-    
-    energyPaths.add(inner2);
-    pixelPaths.add(inner1);
-    
-
     // look at SeamInfo of three upper neighbors
     double topLeftEnergy = 0;
     double topEnergy = 0;
@@ -497,6 +480,57 @@ class Grid implements Iterable<APixel> {
     // potentially can be null if no grid
     return minSeam;
   }
+
+  // converts this grid to an ArrayList of lists of pixels
+  ArrayList<ArrayList<Pixel>> gridToArrayListPixel() {
+    // the arraylist corresponding to this grid
+    ArrayList<ArrayList<Pixel>> gridArr = new ArrayList<ArrayList<Pixel>>();
+    APixel rowPixel = this.corner.down; // start at first edge sentinel
+    SentinelColumnIt it = new SentinelColumnIt(this.corner.down);
+
+    // while there still exists a row and current index is less than 
+    // row destination, advance to the next row
+    while (it.hasNext()) {
+      rowPixel = it.next();
+      rowPixel = rowPixel.advanceRight();
+      RightIterator rowIt = new RightIterator(rowPixel);
+      ArrayList<Pixel> row = new ArrayList<Pixel>();
+
+      // while this row still has pixels, add that pixel to arraylist row
+      while (rowIt.hasNext()) {
+        rowPixel = rowIt.next();
+        row.add((Pixel) rowPixel);
+      }
+      gridArr.add(row);
+    }
+    return gridArr;
+  }
+
+  // converts this grid to an ArrayList of lists of pixel energies
+  ArrayList<ArrayList<Double>> gridToArrayListEnergy() {
+    // the arraylist corresponding to this grid
+    ArrayList<ArrayList<Double>> gridArr = new ArrayList<ArrayList<Double>>();
+    APixel rowPixel = this.corner.down; // start at first edge sentinel
+    SentinelColumnIt it = new SentinelColumnIt(this.corner.down);
+
+    // while there still exists a row and current index is less than 
+    // row destination, advance to the next row
+    while (it.hasNext()) {
+      rowPixel = it.next();
+      rowPixel = rowPixel.advanceRight();
+      RightIterator rowIt = new RightIterator(rowPixel);
+      ArrayList<Double> row = new ArrayList<Double>();
+
+      // while this row still has pixels, add that pixel to arraylist row
+      while (rowIt.hasNext()) {
+        rowPixel = rowIt.next();
+        Pixel pixel = (Pixel) rowPixel;
+        row.add(pixel.brightness());
+      }
+      gridArr.add(row);
+    }
+    return gridArr;
+  }
   
   // draws this grid as a pixel image
   WorldImage render() {
@@ -514,6 +548,8 @@ class Grid implements Iterable<APixel> {
     // pixel image color to color of grid pixel
     for (int row = 0; row < this.height; row++) {
       APixel curr = rowPixel.advanceRight();
+      // for every pixel in this grid row, set the pixel's color to the corresponding
+      // image pixel
       for (int currPixel = 0; currPixel < this.width; currPixel++) {
         carvedImage.setPixel(currPixel, row, curr.color);
         curr = curr.advanceRight();
@@ -522,24 +558,6 @@ class Grid implements Iterable<APixel> {
     }
     return carvedImage;
   }
-
-  // fixes the links of the row of the given pixel
-  public void fixLinks(APixel pixel) {
-
-    RightIterator it = new RightIterator(pixel);
-
-    while (it.hasNext()) {
-      APixel left = pixel.left;
-      APixel right = pixel.right;
-      APixel top = left.up.right;
-
-      top.down = pixel;
-      pixel.up = top;
-      right.left = pixel;
-      it.next();
-    }
-  }
-
 }
 
 // represents a generic iterator that goes through in the list of pixels

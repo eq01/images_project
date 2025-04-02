@@ -20,6 +20,9 @@ class SeamCarving extends World {
   // the grid corresponding with the carved image
   Grid imageGrid;
 
+  // indicates whether carving is paused
+  boolean paused;
+
   // the constructor
   SeamCarving(FromFileImage image) {
     this.fileImage = image;
@@ -50,8 +53,10 @@ class SeamCarving extends World {
   // on every tick, computes minimum seam and removes it from the image,
   // resulting in an empty image
   public void onTick() {
-    //this.imageGrid.removeMinimumSeam();
-    //this.imageGrid.draw();
+    if (!paused) {
+      // remove seams randomly
+      //this.imageGrid.removeMinimumSeam();
+    }
     // save image as a file
     //this.saveImage("img");
   }
@@ -62,6 +67,7 @@ class SeamCarving extends World {
     // check if it's spacebar
     if (key.equals(" ")) {
       // pause the removing process
+      this.paused = !paused;
     }
     else if (key.equals("v")) {
       // remove vertical seams
