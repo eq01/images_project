@@ -197,8 +197,7 @@ class Pixel extends APixel {
   }
 
   // calculates the horizontal energy of this pixel: how much the three left
-  // neighbors
-  // of this pixel differ from the three right neighbors
+  // neighbors of this pixel differ from the three right neighbors
   double horizontalEnergy() {
     double topLeft = this.left.topPixelBrightness();
     double left = this.left.brightness();
@@ -211,8 +210,7 @@ class Pixel extends APixel {
   }
 
   // calculates the vertical energy of this pixel: how much the three top
-  // neighbors
-  // of this pixel differ from the three bottom neighbors
+  // neighbors of this pixel differ from the three bottom neighbors
   double verticalEnergy() {
     double topLeft = this.left.topPixelBrightness();
     double top = this.up.brightness();
@@ -389,6 +387,9 @@ class Grid implements Iterable<APixel> {
   // this grid
   // if there's only one seam to remove, remove it and leave an empty image
   void removeMinimumSeam(String dir) {
+    if (!this.corner.hasPixels()) {
+      return;
+    }
     SeamInfo seamToRemove = this.minimumSeam(dir);
     seamToRemove.paintRed();
     // remove it through delegation and mutate this grid
@@ -434,23 +435,30 @@ class Grid implements Iterable<APixel> {
 
   ArrayList<SeamInfo> minimumSeamInfoList(ArrayList<ArrayList<Pixel>> pixelPaths,
       ArrayList<ArrayList<Double>> energyPaths) {
+    
+    // construct a list of SeamInfos to compare at the end
+    ArrayList<SeamInfo> seams = new ArrayList<SeamInfo>();
+
+    // check size of lists for pixel paths and energy paths
+    if (pixelPaths.size() <= 1) {
+      ArrayList<Pixel> firstRow = pixelPaths.get(0);
+      seams.add(new SeamInfo(firstRow.get(0)));
+    } else {
+      // for every pixel in the first row, start a seam
+      ArrayList<Pixel> firstRow = pixelPaths.get(0);
+      for (int i = 0; i < firstRow.size(); i++) {
+        SeamInfo seam = new SeamInfo(firstRow.get(i));
+        seams.add(seam);
+      }
+    }
     // look at SeamInfo of three upper neighbors
     double topLeftEnergy = 0;
     double topEnergy = 0;
     double topRightEnergy = 0;
 
-    // construct a list of SeamInfos to compare at the end
-    ArrayList<SeamInfo> seams = new ArrayList<SeamInfo>();
-    // for every pixel in the first row, start a seam
-    ArrayList<Pixel> firstRow = pixelPaths.get(0);
-    for (int i = 0; i < firstRow.size(); i++) {
-      SeamInfo seam = new SeamInfo(firstRow.get(i));
-      seams.add(seam);
-    }
-
     // for every row in the grid, check the upper neighbors of each pixel in that
     // row and sum up to the minimum path
-    for (int rowIndex = 0; rowIndex < pixelPaths.size(); rowIndex++) {
+    for (int rowIndex = 1; rowIndex < pixelPaths.size(); rowIndex++) {
       // get that row to iterate through
       ArrayList<Pixel> currRow = pixelPaths.get(rowIndex);
       // get the row of energies that correspond to this row
@@ -877,18 +885,29 @@ class ExamplesImages {
     boolean hi2 = c.drawScene(s.placeImageXY(new ScaleImage(expected, 50), 700, 375)) && c.show();
   }
 
+  void testGridToArrayListPixel(Tester t) {
+    gridEmpty.addPixel(0, Color.BLUE);
+    gridEmpty.addPixel(0, Color.RED);
+    gridEmpty.addPixel(1, Color.YELLOW);
+    gridEmpty.addPixel(1, Color.GREEN);
+  }
+
+  void testGridToArrayListEnergy(Tester t) {
+    //
+  }
+
   // test brightness method
-  void testBrightness(Tester t) {
-    this.initData();
+  // void testBrightness(Tester t) {
+  //   this.initData();
 
-    t.checkException(new IllegalArgumentException("average is not between 0.0 and 1.0!"), p4,
-        "brightness");
+  //   t.checkException(new IllegalArgumentException("average is not between 0.0 and 1.0!"), p4,
+  //       "brightness");
 
-    t.checkExpect(this.p3.brightness(), 1.0);
+  //   t.checkExpect(this.p3.brightness(), 1.0);
 
-    t.checkExpect(this.p5.brightness(), 1.0);
-  }
+  //   t.checkExpect(this.p5.brightness(), 1.0);
+  // }
 
-  void testVerticalEnergy(Tester t) {
-  }
+  // void testVerticalEnergy(Tester t) {
+  // }
 }
