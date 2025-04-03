@@ -55,7 +55,7 @@ class SeamCarving extends World {
   public void onTick() {
     if (!paused) {
       // remove seams randomly
-      //this.imageGrid.removeMinimumSeam();
+      this.imageGrid.removeMinimumSeam("v");
     }
     // save image as a file
     //this.saveImage("img");
