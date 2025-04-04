@@ -1,198 +1,145 @@
-import java.util.ArrayList;
-import java.util.function.*;
+import java.util.Iterator;
 
+//represents a generic iterator that goes through in the list of pixels
+abstract class GridIterator implements Iterator<APixel> {
+  // the list to iterate through
+  APixel source;
 
-// finds the minimum seam of both horizontal and vertical seams
-class MinSeamVertical implements BiFunction<ArrayList<ArrayList<Pixel>>, 
-ArrayList<ArrayList<Double>>, SeamInfo> {
+  // the constructor
+  GridIterator(APixel source) {
+    this.source = source;
+  }
 
-  public SeamInfo apply(ArrayList<ArrayList<Pixel>> pixelPaths,
-      ArrayList<ArrayList<Double>> energyPaths) {
+  // checks whether there exists a next node
+  public boolean hasNext() {
+    // check if next one is a node or goes back to sentinel:
+    return this.source instanceof Pixel;
+  }
 
-    // look at SeamInfo of three upper neighbors (initializes)
-    double topLeftEnergy = 0;
-    double topEnergy = 0;
-    double topRightEnergy = 0;
+  // removes this node from the list
+  public void remove() {
+    this.source.remove();
+  }
 
-    // construct a list of SeamInfos to compare at the end
-    ArrayList<SeamInfo> seams = new ArrayList<SeamInfo>();
-    
-    // for every pixel in the first row, start a seam
-    ArrayList<Pixel> firstRow = pixelPaths.get(0);
-    for (int i = 0; i < firstRow.size(); i += 1) {
-      SeamInfo seam = new SeamInfo(firstRow.get(i));
-      seams.add(seam);
-    }
-
-    // for every row in the grid, check the 
-    // upper neighbors of each pixel in that row
-    // and sum up to the minimum path
-    for (int rowIndex = 1; rowIndex < pixelPaths.size(); rowIndex++) {
-      // get that row to iterate through
-      ArrayList<Pixel> currRow = pixelPaths.get(rowIndex);
-      // get the row of energies that correspond to this row
-      ArrayList<Double> currRowEnergies = energyPaths.get(rowIndex);
-      // the energies of the row above
-      ArrayList<Double> rowEnergiesAbove = energyPaths.get(rowIndex - 1);
-
-      // for every pixel in that row, calculate the minimum path energy and change
-      // the energy path to the sum with the current path
-      for (int pixIndex = 0; pixIndex < currRow.size(); pixIndex += 1) {
-        // current pixel
-        Pixel currPixel = currRow.get(pixIndex);
-        topEnergy = rowEnergiesAbove.get(pixIndex);
-        // check if left edge
-        if (pixIndex == 0) {
-          topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
-          topLeftEnergy = 0;
-        }
-        // check if right edge
-        else if (pixIndex == currRow.size() - 1) {
-          topRightEnergy = 0;
-          topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
-        }
-        else {
-          topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
-          topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
-        }
-        // compare energies, change energy in list and make seam
-        double sumEnergy = 0;
-        SeamInfo lastSeam;
-
-        if (topLeftEnergy <= topEnergy && topLeftEnergy <= topRightEnergy) {
-          // top left has least energy
-          sumEnergy = currRowEnergies.get(pixIndex) + topLeftEnergy;
-          lastSeam = seams.get(pixIndex - 1);
-        }
-        else if (topEnergy <= topRightEnergy) {
-          // top has least energy
-          currRowEnergies.set(pixIndex, currRowEnergies.get(pixIndex) + topEnergy);
-          lastSeam = seams.get(pixIndex);
-        }
-        else {
-          // top right has least energy
-          currRowEnergies.set(pixIndex, currRowEnergies.get(pixIndex) + topRightEnergy);
-          lastSeam = seams.get(pixIndex + 1);
-        }
-        currRowEnergies.set(pixIndex, sumEnergy);
-        // add on this pixel to that minimum seam
-        // link this new SeamInfo to the previous one
-        SeamInfo newSeam = new SeamInfo(currPixel, sumEnergy, lastSeam);
-        // change list of seams
-        seams.set(pixIndex, newSeam);
-      }
-    }
-    return new MinSeamHelper().apply(seams);
+  // returns this iterator with the given pixel as the source
+  public GridIterator createIterator(APixel source) {
+    this.source = source;
+    return this;
   }
 }
 
-//finds the minimum seam of both horizontal and vertical seams
-class MinSeamHorizontal implements
-    BiFunction<ArrayList<ArrayList<Pixel>>, ArrayList<ArrayList<Double>>, SeamInfo> {
+// represents a generic iterator that iterates through sentinels 
+abstract class SentinelIt implements Iterator<APixel> {
+  // the list to iterate through
+  APixel source;
 
-  public SeamInfo apply(ArrayList<ArrayList<Pixel>> pixelPaths,
-      ArrayList<ArrayList<Double>> energyPaths) {
+  // the constructor
+  SentinelIt(APixel source) {
+    this.source = source;
+  }
 
-    // look at SeamInfo of three neighbors (initializes)
-    double leftUpEnergy = 0;
-    double leftEnergy = 0;
-    double leftDownEnergy = 0;
+  // checks whether next node is still an edge sentinel or not
+  public boolean hasNext() {
+    return this.source instanceof SentinelEdge;
+  }
 
-    // construct a list of SeamInfos to compare at the end
-    ArrayList<SeamInfo> seams = new ArrayList<SeamInfo>();
+  // removes this node from the list
+  public void remove() {
+    this.source.remove();
+  }
 
-    // for every pixel in the first column, start a seam
-    for (int i = 0; i < pixelPaths.size(); i += 1) {
-      // gets the first element in each row
-      SeamInfo seam = new SeamInfo(pixelPaths.get(i).get(0));
-      seams.add(seam);
-    }
-
-
-    // for every row in the grid, check the 
-    // neighbors of each pixel in that column
-    // and sum up to the minimum path
-    for (int colIndex = 1; colIndex < pixelPaths.get(0).size(); colIndex += 1) {
-      // list of pixels in current column
-      ArrayList<Pixel> currCol = new ArrayList<Pixel>();
-      // list of the energies in current column
-      ArrayList<Double> currColEnergies = new ArrayList<Double>();
-      // list of energies in previous column
-      ArrayList<Double> colEnergiesBehind = new ArrayList<Double>();
-      
-      // accumulates the information about the column to add to the above arrayLists
-      for (int row = 0; row < pixelPaths.size(); row += 1) {
-        currCol.add(pixelPaths.get(row).get(colIndex));
-        currColEnergies.add(energyPaths.get(row).get(colIndex));
-        colEnergiesBehind.add(energyPaths.get(row).get(colIndex - 1));
-      }
-
-      // for every pixel in that column, calculate the minimum path energy and change
-      // the energy path to the sum with the current path
-      for (int pixIndex = 0; pixIndex < currCol.size(); pixIndex++) {
-        // current pixel
-        Pixel currPixel = currCol.get(pixIndex);
-        leftEnergy = colEnergiesBehind.get(pixIndex);
-        // check if top
-        if (pixIndex == 0) {
-          leftDownEnergy = colEnergiesBehind.get(pixIndex + 1);
-          leftUpEnergy = 0;
-        }
-        // check if bottom
-        else if (pixIndex == currCol.size() - 1) {
-          leftDownEnergy = 0;
-          leftUpEnergy = colEnergiesBehind.get(pixIndex - 1);
-        }
-        else {
-          leftDownEnergy = colEnergiesBehind.get(pixIndex + 1);
-          leftUpEnergy = colEnergiesBehind.get(pixIndex - 1);
-        }
-        // compare energies, change energy in list and make seam
-        double sumEnergy = 0;
-        SeamInfo lastSeam;
-
-        if (leftUpEnergy <= leftEnergy && leftUpEnergy <= leftDownEnergy) {
-          // top has least energy
-          sumEnergy = currColEnergies.get(pixIndex) + leftUpEnergy;
-          lastSeam = seams.get(pixIndex - 1);
-        }
-        else if (leftEnergy <= leftDownEnergy) {
-          // left has least energy
-          currColEnergies.set(pixIndex, currColEnergies.get(pixIndex) + leftEnergy);
-          lastSeam = seams.get(pixIndex);
-        }
-        else {
-          // bottom has least energy
-          currColEnergies.set(pixIndex, currColEnergies.get(pixIndex) + leftDownEnergy);
-          lastSeam = seams.get(pixIndex + 1);
-        }
-        currColEnergies.set(pixIndex, sumEnergy);
-        // add on this pixel to that minimum seam
-        // link this new SeamInfo to the previous one
-        SeamInfo newSeam = new SeamInfo(currPixel, sumEnergy, lastSeam);
-        // change list of seams
-        seams.set(pixIndex, newSeam);
-      }
-    }
-    return new MinSeamHelper().apply(seams);
+  // advances the given pixel in the direction suitable for this iterator
+  public APixel advancePixel(APixel pixel) {
+    return pixel;
   }
 }
 
-// creates the new seams from what was generated in MinSeam
-class MinSeamHelper implements Function<ArrayList<SeamInfo>, SeamInfo> {
-  
-  // creates new seams
-  public SeamInfo apply(ArrayList<SeamInfo> seams) {
-    SeamInfo minSeam = seams.get(0);
-    SeamInfo currSeam = minSeam;
-    // compare the weights of the seams at end
-    // parse through seam list and find minimum energy seam
-    for (int i = 0; i < seams.size(); i++) {
-      currSeam = seams.get(i);
-      if (currSeam.hasLessEnergy(minSeam)) {
-        minSeam = currSeam;
-      }
+// represents an iterator that iterates through a column of sentinels (keeps track of row)
+class SentinelColumnIt extends SentinelIt {
+  // the constructor
+  SentinelColumnIt(APixel source) {
+    super(source);
+  }
+
+  // retrieves this pixel's color and goes on to the next
+  public APixel next() {
+    // checks if there are elements
+    if (!this.hasNext()) { // next one is SentinelCorner
+      throw new RuntimeException("No elements to iterate through.");
     }
-    return minSeam;
+    SentinelEdge pixel = (SentinelEdge) source;
+    this.source = pixel.advanceDown();
+    return pixel;
+  }
+
+  @Override
+  // advances the given pixel to the right to access the row of pixels
+  public APixel advancePixel(APixel pixel) {
+    return pixel.advanceRight();
+  }
+}
+
+// represents an iterator that iterates through a row of sentinels (keeps track of column)
+class SentinelRowIt extends SentinelIt {
+  // the constructor
+  SentinelRowIt(APixel source) {
+    super(source);
+  }
+
+  // retrieves this pixel's color and goes on to the next
+  public APixel next() {
+    // checks if there are elements
+    if (!this.hasNext()) { // next one is SentinelCorner
+      throw new RuntimeException("No elements to iterate through.");
+    }
+    SentinelEdge pixel = (SentinelEdge) source;
+    this.source = pixel.advanceRight();
+    return pixel;
+  }
+
+  @Override
+  // advances the given pixel down to access the column of pixels
+  public APixel advancePixel(APixel pixel) {
+    return pixel.advanceDown();
+  }
+}
+
+// represents an iterator that goes forward in the list of pixels
+class RightIterator extends GridIterator {
+  // the constructor
+  RightIterator(APixel source) {
+    super(source);
+  }
+
+  // retrieves this pixel's color and goes on to the next
+  public Pixel next() {
+    // checks if there are elements
+    if (!this.hasNext()) { // next one is sentinel
+      throw new RuntimeException("No elements to iterate through.");
+    }
+    Pixel abstractPixelAsPixel = (Pixel) source;
+    // Color color = abstractPixelAsPixel.color;
+    this.source = abstractPixelAsPixel.advanceRight();
+    return abstractPixelAsPixel;
+  }
+}
+
+// represents an iterator that goes down in a column of pixels
+class DownIterator extends GridIterator {
+  // the constructor
+  DownIterator(APixel source) {
+    super(source);
+  }
+
+  // retrieves this pixel's color and goes on to the next
+  public Pixel next() {
+    // checks if there are elements
+    if (!this.hasNext()) { // next one is sentinel
+      throw new RuntimeException("No elements to iterate through.");
+    }
+    Pixel abstractPixelAsPixel = (Pixel) source;
+    // Color color = abstractPixelAsPixel.color;
+    this.source = abstractPixelAsPixel.advanceDown();
+    return abstractPixelAsPixel;
   }
 }
