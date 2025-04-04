@@ -22,6 +22,8 @@ class SeamCarving extends World {
 
   // indicates whether carving is paused
   boolean paused;
+  // indicates whether it's the first tick or not
+  boolean firstTick;
 
   // the constructor
   SeamCarving(FromFileImage image) {
@@ -30,6 +32,8 @@ class SeamCarving extends World {
     this.imageHeight = (int) fileImage.getHeight();
     // turn image into a grid of pixels
     this.imageGrid = new Grid();
+    this.paused = false;
+    this.firstTick = true;
 
     // for every row in the image, set the color of file image pixel into
     // a new Pixel in the grid
@@ -54,8 +58,17 @@ class SeamCarving extends World {
   // resulting in an empty image
   public void onTick() {
     if (!paused) {
+      SeamInfo seamToRemove = this.imageGrid.minimumSeam("v");
       // remove seams randomly
-      this.imageGrid.removeMinimumSeam("v");
+      if (firstTick) {
+        seamToRemove.paintRed();
+      } else {
+        // remove seams while grid is empty
+        while (!this.imageGrid.isEmpty()) {
+          this.imageGrid.removeMinimumSeam(seamToRemove, "v");
+        }
+      }
+      this.firstTick = !firstTick;
     }
     // save image as a file
     //this.saveImage("img");
@@ -69,11 +82,9 @@ class SeamCarving extends World {
       // pause the removing process
       this.paused = !paused;
     }
-    else if (key.equals("v")) {
-      // remove vertical seams
-    }
-    else if (key.equals("h")) {
-      // remove horizontal seams
+    else if (key.equals("v") || key.equals("h")) {
+      SeamInfo seamToRemove = this.imageGrid.minimumSeam(key);
+      this.imageGrid.removeMinimumSeam(seamToRemove, key);
     }
   }
 

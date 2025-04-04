@@ -122,12 +122,7 @@ abstract class APixel implements IPixel {
     double average = (blue + red + green) / 3.0;
     average = average / 255.0;
 
-    if (average > 1.0 || average < 0.0) {
-      throw new IllegalArgumentException("average is not between 0.0 and 1.0!");
-    }
-    else {
-      return average;
-    }
+    return average;
   }
 
   // computes the brightness of the pixel on top of this one
@@ -386,13 +381,13 @@ class Grid implements Iterable<APixel> {
   // EFFECT: removes the seam of the specified direction with least energy from
   // this grid
   // if there's only one seam to remove, remove it and leave an empty image
-  void removeMinimumSeam(String dir) {
+  void removeMinimumSeam(SeamInfo seamToRemove, String dir) {
     if (!this.corner.hasPixels()) {
       return;
     }
-    SeamInfo seamToRemove = this.minimumSeam(dir);
-    seamToRemove.paintRed();
+    // need to remove the sentinels too, can just remove at the end
     // remove it through delegation and mutate this grid
+    // linking depends on vertical/horizontal?
     seamToRemove.removeSeam();
   }
 
@@ -400,23 +395,31 @@ class Grid implements Iterable<APixel> {
   // (horizontal/vertical)
   SeamInfo minimumSeam(String dir) {
     // default vertical
-    SentinelIt sentIt = new SentinelColumnIt(this.corner.down);
-    GridIterator gridIt = new RightIterator(this.corner);
+    SentinelIt sentItPixel = new SentinelColumnIt(this.corner.down);
+    GridIterator gridItPixel = new RightIterator(this.corner);
+    SentinelIt sentItEnergy = new SentinelColumnIt(this.corner.down);
+    GridIterator gridItEnergy = new RightIterator(this.corner);
 
     // check direction
     if (dir.equals("v")) {
-      sentIt = new SentinelColumnIt(this.corner.down);
-      gridIt = new RightIterator(this.corner);
+      sentItPixel = new SentinelColumnIt(this.corner.down);
+      gridItPixel = new RightIterator(this.corner);
+      sentItEnergy = new SentinelColumnIt(this.corner.down);
+      gridItEnergy = new RightIterator(this.corner);
     }
     else if (dir.equals("h")) {
-      sentIt = new SentinelRowIt(this.corner.right);
-      gridIt = new DownIterator(this.corner);
+      sentItPixel = new SentinelRowIt(this.corner.right);
+      gridItPixel = new DownIterator(this.corner);
+      sentItEnergy = new SentinelRowIt(this.corner.right);
+      gridItEnergy = new DownIterator(this.corner);
     }
     // construct array list of the pixels of this grid
-    ArrayList<ArrayList<Pixel>> pixelPaths = this.gridToArrayListPixel(sentIt, gridIt);
+    ArrayList<ArrayList<Pixel>> pixelPaths = this.gridToArrayListPixel(sentItPixel, gridItPixel);
     // two arraylists whose indexes corresponding with one another?
-    ArrayList<ArrayList<Double>> energyPaths = this.gridToArrayListEnergy(sentIt, gridIt);
+    ArrayList<ArrayList<Double>> energyPaths = this.gridToArrayListEnergy(sentItEnergy,
+        gridItEnergy);
 
+    // collect energies of all seams
     ArrayList<SeamInfo> seams = minimumSeamInfoList(pixelPaths, energyPaths);
 
     SeamInfo minSeam = seams.get(0);
@@ -433,30 +436,27 @@ class Grid implements Iterable<APixel> {
     return minSeam;
   }
 
+  // finds the minimum seam for every pixel in the row from the given non-empty
+  // arraylist of pixels and energies and returns a list of the SeamInfos
   ArrayList<SeamInfo> minimumSeamInfoList(ArrayList<ArrayList<Pixel>> pixelPaths,
       ArrayList<ArrayList<Double>> energyPaths) {
-    
+
     // construct a list of SeamInfos to compare at the end
     ArrayList<SeamInfo> seams = new ArrayList<SeamInfo>();
 
     // check size of lists for pixel paths and energy paths
-    if (pixelPaths.size() <= 1) {
-      ArrayList<Pixel> firstRow = pixelPaths.get(0);
-      seams.add(new SeamInfo(firstRow.get(0)));
-    } else {
-      // for every pixel in the first row, start a seam
-      ArrayList<Pixel> firstRow = pixelPaths.get(0);
-      for (int i = 0; i < firstRow.size(); i++) {
-        SeamInfo seam = new SeamInfo(firstRow.get(i));
-        seams.add(seam);
-      }
+    // for every pixel in the first row, start a seam
+    ArrayList<Pixel> firstRow = pixelPaths.get(0);
+    for (int i = 0; i < firstRow.size(); i++) {
+      SeamInfo seam = new SeamInfo(firstRow.get(i));
+      seams.add(seam);
     }
-    // look at SeamInfo of three upper neighbors
-    double topLeftEnergy = 0;
-    double topEnergy = 0;
-    double topRightEnergy = 0;
+    if (pixelPaths.size() == 1) {
+      return seams;
+    }
 
-    // for every row in the grid, check the upper neighbors of each pixel in that
+    // for every row in the grid, check the energies of the upper neighbors of each
+    // pixel in that
     // row and sum up to the minimum path
     for (int rowIndex = 1; rowIndex < pixelPaths.size(); rowIndex++) {
       // get that row to iterate through
@@ -471,40 +471,14 @@ class Grid implements Iterable<APixel> {
       for (int pixIndex = 0; pixIndex < currRow.size(); pixIndex++) {
         // current pixel
         Pixel currPixel = currRow.get(pixIndex);
-        topEnergy = rowEnergiesAbove.get(pixIndex);
-        // check if left edge
-        if (pixIndex == 0) {
-          topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
-          topLeftEnergy = 0;
-        }
-        // check if right edge
-        else if (pixIndex == currRow.size() - 1) {
-          topRightEnergy = 0;
-          topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
-        }
-        else {
-          topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
-          topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
-        }
-        // compare energies, change energy in list and make seam
         double sumEnergy = 0;
         SeamInfo lastSeam;
 
-        if (topLeftEnergy <= topEnergy && topLeftEnergy <= topRightEnergy) {
-          // top left has least energy
-          sumEnergy = currRowEnergies.get(pixIndex) + topLeftEnergy;
-          lastSeam = seams.get(pixIndex - 1);
-        }
-        else if (topEnergy <= topRightEnergy) {
-          // top has least energy
-          currRowEnergies.set(pixIndex, currRowEnergies.get(pixIndex) + topEnergy);
-          lastSeam = seams.get(pixIndex);
-        }
-        else {
-          // top right has least energy
-          currRowEnergies.set(pixIndex, currRowEnergies.get(pixIndex) + topRightEnergy);
-          lastSeam = seams.get(pixIndex + 1);
-        }
+        int leastEnergyNeighbor = leastEnergyNeighbor(rowEnergiesAbove, pixIndex);
+        sumEnergy = currRowEnergies.get(pixIndex)
+            + rowEnergiesAbove.get(pixIndex + leastEnergyNeighbor);
+        lastSeam = seams.get(pixIndex + leastEnergyNeighbor);
+
         currRowEnergies.set(pixIndex, sumEnergy);
         // add on this pixel to that minimum seam
         // link this new SeamInfo to the previous one
@@ -516,11 +490,54 @@ class Grid implements Iterable<APixel> {
     return seams;
   }
 
+  // finds the path with least energy out of the top three neighbors of the given
+  // pixel index (given as a list of energies above that pixel), returning
+  // -1, 0, or 1 for topleft, top, or topright respectively
+  int leastEnergyNeighbor(ArrayList<Double> rowEnergiesAbove, int pixIndex) {
+    double topEnergy = rowEnergiesAbove.get(pixIndex);
+    // check if left and right neighbors exist
+    if (pixIndex - 1 < 0) { // no left neighbor
+      // no right neighbor either
+      if (pixIndex + 1 >= rowEnergiesAbove.size()) {
+        return 0;
+      }
+      else {
+        // compare topright with top
+        if (topEnergy <= rowEnergiesAbove.get(pixIndex + 1)) {
+          return 0;
+        }
+        return 1;
+      }
+    }
+    else if (pixIndex + 1 >= rowEnergiesAbove.size()) { // no right neighbor
+      // compare with left neighbor
+      if (rowEnergiesAbove.get(pixIndex - 1) <= topEnergy) {
+        return -1;
+      }
+      return 0;
+    }
+    // both neighbors exist
+    else {
+      // compare with both
+      double topLeftEnergy = rowEnergiesAbove.get(pixIndex - 1);
+      double topRightEnergy = rowEnergiesAbove.get(pixIndex + 1);
+      if (topLeftEnergy <= topEnergy && topLeftEnergy <= topRightEnergy) {
+        return -1;
+      }
+      else if (topEnergy <= topRightEnergy) {
+        return 0;
+      }
+      else {
+        return 1;
+      }
+    }
+  }
+
   // converts this grid to an ArrayList of lists of pixels
   ArrayList<ArrayList<Pixel>> gridToArrayListPixel(SentinelIt sentIt, GridIterator gridIt) {
     // the arraylist corresponding to this grid
     ArrayList<ArrayList<Pixel>> gridArr = new ArrayList<ArrayList<Pixel>>();
-    APixel rowPixel = this.corner.down; // start at first edge sentinel
+    APixel rowPixel = this.corner; // start at first edge sentinel
 
     // while there still exists a row and current index is less than
     // row destination, advance to the next row
@@ -544,19 +561,19 @@ class Grid implements Iterable<APixel> {
   ArrayList<ArrayList<Double>> gridToArrayListEnergy(SentinelIt sentIt, GridIterator gridIt) {
     // the arraylist corresponding to this grid
     ArrayList<ArrayList<Double>> gridArr = new ArrayList<ArrayList<Double>>();
-    APixel rowPixel = this.corner.down; // start at first edge sentinel
+    APixel rowPixel = this.corner; // start at first edge sentinel
 
     // while there still exists a row and current index is less than
     // row destination, advance to the next row
     while (sentIt.hasNext()) {
       rowPixel = sentIt.next();
       rowPixel = sentIt.advancePixel(rowPixel);
-      RightIterator rowIt = new RightIterator(rowPixel);
+      gridIt = gridIt.createIterator(rowPixel);
       ArrayList<Double> row = new ArrayList<Double>();
 
       // while this row still has pixels, add that pixel to arraylist row
-      while (rowIt.hasNext()) {
-        rowPixel = rowIt.next();
+      while (gridIt.hasNext()) {
+        rowPixel = gridIt.next();
         Pixel pixel = (Pixel) rowPixel;
         row.add(pixel.brightness());
       }
@@ -591,149 +608,10 @@ class Grid implements Iterable<APixel> {
     }
     return carvedImage;
   }
-}
 
-// represents a generic iterator that goes through in the list of pixels
-abstract class GridIterator implements Iterator<APixel> {
-  // the list to iterate through
-  APixel source;
-
-  // the constructor
-  GridIterator(APixel source) {
-    this.source = source;
-  }
-
-  // checks whether there exists a next node
-  public boolean hasNext() {
-    // check if next one is a node or goes back to sentinel:
-    return this.source instanceof Pixel;
-  }
-
-  // removes this node from the list
-  public void remove() {
-    this.source.remove();
-  }
-
-  // returns this iterator with the given pixel as the source
-  public GridIterator createIterator(APixel source) {
-    this.source = source;
-    return this;
-  }
-}
-
-// represents a generic iterator that iterates through sentinels 
-abstract class SentinelIt implements Iterator<APixel> {
-  // the list to iterate through
-  APixel source;
-
-  // the constructor
-  SentinelIt(APixel source) {
-    this.source = source;
-  }
-
-  // checks whether next node is still an edge sentinel or not
-  public boolean hasNext() {
-    return this.source instanceof SentinelEdge;
-  }
-
-  // removes this node from the list
-  public void remove() {
-    this.source.remove();
-  }
-
-  // advances the given pixel in the direction suitable for this iterator
-  public APixel advancePixel(APixel pixel) {
-    return pixel;
-  }
-}
-
-// represents an iterator that iterates through a column of sentinels (keeps track of row)
-class SentinelColumnIt extends SentinelIt {
-  // the constructor
-  SentinelColumnIt(APixel source) {
-    super(source);
-  }
-
-  // retrieves this pixel's color and goes on to the next
-  public APixel next() {
-    // checks if there are elements
-    if (!this.hasNext()) { // next one is SentinelCorner
-      throw new RuntimeException("No elements to iterate through.");
-    }
-    SentinelEdge pixel = (SentinelEdge) source;
-    this.source = pixel.advanceDown();
-    return pixel;
-  }
-
-  @Override
-  // advances the given pixel to the right to access the row of pixels
-  public APixel advancePixel(APixel pixel) {
-    return pixel.advanceRight();
-  }
-}
-
-// represents an iterator that iterates through a row of sentinels (keeps track of column)
-class SentinelRowIt extends SentinelIt {
-  // the constructor
-  SentinelRowIt(APixel source) {
-    super(source);
-  }
-
-  // retrieves this pixel's color and goes on to the next
-  public APixel next() {
-    // checks if there are elements
-    if (!this.hasNext()) { // next one is SentinelCorner
-      throw new RuntimeException("No elements to iterate through.");
-    }
-    SentinelEdge pixel = (SentinelEdge) source;
-    this.source = pixel.advanceRight();
-    return pixel;
-  }
-
-  @Override
-  // advances the given pixel down to access the column of pixels
-  public APixel advancePixel(APixel pixel) {
-    return pixel.advanceDown();
-  }
-}
-
-// represents an iterator that goes forward in the list of pixels
-class RightIterator extends GridIterator {
-  // the constructor
-  RightIterator(APixel source) {
-    super(source);
-  }
-
-  // retrieves this pixel's color and goes on to the next
-  public Pixel next() {
-    // checks if there are elements
-    if (!this.hasNext()) { // next one is sentinel
-      throw new RuntimeException("No elements to iterate through.");
-    }
-    Pixel abstractPixelAsPixel = (Pixel) source;
-    // Color color = abstractPixelAsPixel.color;
-    this.source = abstractPixelAsPixel.advanceRight();
-    return abstractPixelAsPixel;
-  }
-}
-
-// represents an iterator that goes down in a column of pixels
-class DownIterator extends GridIterator {
-  // the constructor
-  DownIterator(APixel source) {
-    super(source);
-  }
-
-  // retrieves this pixel's color and goes on to the next
-  public Pixel next() {
-    // checks if there are elements
-    if (!this.hasNext()) { // next one is sentinel
-      throw new RuntimeException("No elements to iterate through.");
-    }
-    Pixel abstractPixelAsPixel = (Pixel) source;
-    // Color color = abstractPixelAsPixel.color;
-    this.source = abstractPixelAsPixel.advanceDown();
-    return abstractPixelAsPixel;
+  // checks whether this grid contains any pixels or not
+  boolean isEmpty() {
+    return this.width == 0 && this.height == 0;
   }
 }
 
@@ -880,34 +758,34 @@ class ExamplesImages {
     gridEmpty.addPixel(1, Color.YELLOW);
     gridEmpty.addPixel(1, Color.GREEN);
     t.checkExpect(gridEmpty.render(), expected);
-    boolean hi = c.drawScene(s.placeImageXY(new ScaleImage(gridEmpty.render(), 50), 200, 375))
-        && c.show();
-    boolean hi2 = c.drawScene(s.placeImageXY(new ScaleImage(expected, 50), 700, 375)) && c.show();
+    //boolean hi = c.drawScene(s.placeImageXY(new ScaleImage(gridEmpty.render(), 50), 200, 375))
+    //    && c.show();
+    //boolean hi2 = c.drawScene(s.placeImageXY(new ScaleImage(expected, 50), 700, 375)) && c.show();
   }
 
   void testGridToArrayListPixel(Tester t) {
+    this.initData();
     gridEmpty.addPixel(0, Color.BLUE);
     gridEmpty.addPixel(0, Color.RED);
     gridEmpty.addPixel(1, Color.YELLOW);
     gridEmpty.addPixel(1, Color.GREEN);
+    SentinelIt sentIt = new SentinelColumnIt(gridEmpty.corner.down);
+    GridIterator gridIt = new RightIterator(gridEmpty.corner);
+    ArrayList<ArrayList<Pixel>> arr = gridEmpty.gridToArrayListPixel(sentIt, gridIt);
+    t.checkExpect(arr.isEmpty(), false);
+    ArrayList<Pixel> row1 = new ArrayList<Pixel>();
+    row1.add(new Pixel(Color.BLUE));
+    row1.add(new Pixel(Color.RED));
+    ArrayList<Pixel> row2 = new ArrayList<Pixel>();
+    row2.add(new Pixel(Color.YELLOW));
+    row2.add(new Pixel(Color.GREEN));
+    ArrayList<ArrayList<Pixel>> expected = new ArrayList<ArrayList<Pixel>>();
+    expected.add(row1);
+    expected.add(row2);
+    t.checkExpect(arr, expected);
   }
 
   void testGridToArrayListEnergy(Tester t) {
     //
   }
-
-  // test brightness method
-  // void testBrightness(Tester t) {
-  //   this.initData();
-
-  //   t.checkException(new IllegalArgumentException("average is not between 0.0 and 1.0!"), p4,
-  //       "brightness");
-
-  //   t.checkExpect(this.p3.brightness(), 1.0);
-
-  //   t.checkExpect(this.p5.brightness(), 1.0);
-  // }
-
-  // void testVerticalEnergy(Tester t) {
-  // }
 }
