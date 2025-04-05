@@ -1,6 +1,7 @@
 import javalib.impworld.*;
 import javalib.worldimages.*;
 import tester.*;
+import java.util.ArrayList;
 
 // runs seam carving on an image
 class SeamCarving extends World {
@@ -58,20 +59,22 @@ class SeamCarving extends World {
   // resulting in an empty image
   public void onTick() {
     if (!paused) {
-      SeamInfo seamToRemove = this.imageGrid.minimumSeam("v");
-      // remove seams randomly
-      if (firstTick) {
-        seamToRemove.paintRed();
-      } else {
-        // remove seams while grid is empty
-        while (!this.imageGrid.isEmpty()) {
+      // while grid still has pixels, compute minimum seam and remove
+      while (!this.imageGrid.isEmpty()) {
+        SeamInfo seamToRemove = this.imageGrid.minimumSeam("v");
+        // remove seams randomly
+        if (firstTick) {
+          seamToRemove.paintRed();
+        }
+        else {
+          // remove seams while grid is empty
           this.imageGrid.removeMinimumSeam(seamToRemove, "v");
         }
+        this.firstTick = !firstTick;
       }
-      this.firstTick = !firstTick;
     }
     // save image as a file
-    //this.saveImage("img");
+    // this.saveImage("img");
   }
 
   // based on the key pressed, allows user to pause and unpause removal of seams,
@@ -112,7 +115,25 @@ class ExamplesSeamCarving {
 
   void testBigBang(Tester t) {
     this.initData();
-    double tickRate = 1.0;
+    double tickRate = 3.0;
     sc.bigBang(WIDTH, HEIGHT, tickRate);
+  }
+
+  void testArrayListConversions(Tester t) {
+    this.initData();
+    SentinelIt sentIt = new SentinelColumnIt(sc.imageGrid.corner.down);
+    GridIterator gridIt = new RightIterator(sc.imageGrid.corner);
+    SentinelIt sentIt2 = new SentinelColumnIt(sc.imageGrid.corner.down);
+    GridIterator gridIt2 = new RightIterator(sc.imageGrid.corner);
+    ArrayList<ArrayList<Pixel>> arr = sc.imageGrid.gridToArrayListPixel(sentIt, gridIt);
+    ArrayList<ArrayList<Double>> arrEnergy = sc.imageGrid.gridToArrayListEnergy(sentIt2, gridIt2);
+    t.checkExpect(arr.isEmpty(), false);
+    t.checkExpect(arr.size(), arrEnergy.size());
+    for (int i = 0; i < arr.size(); i++) {
+      t.checkExpect(arr.get(i).size(), arrEnergy.get(i).size());
+    }
+    for (int i = 1; i < arr.size(); i++) {
+      t.checkExpect(arr.get(i).size(), arr.get(i - 1).size());
+    }
   }
 }
